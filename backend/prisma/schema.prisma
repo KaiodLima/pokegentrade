@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  role         String   @default("User")
+  status       String   @default("ativa")
+  trustScore   Int      @default(0)
+  messages     Message[]
+  ads          Ad[]     @relation("UserAds")
+  directFrom   DirectMessage[] @relation("DirectFrom")
+  directTo     DirectMessage[] @relation("DirectTo")
+}
+
+model Room {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  rulesJson   Json
+  silenced    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  messages    Message[]
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String?
+  content   String
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+  room      Room     @relation(fields: [roomId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([roomId, createdAt])
+}
+
+model Ad {
+  id          String   @id @default(uuid())
+  authorId    String
+  type        String
+  title       String
+  description String
+  price       Float?
+  status      String   @default("pendente")
+  createdAt   DateTime @default(now())
+  approvedBy  String?
+  author      User     @relation("UserAds", fields: [authorId], references: [id])
+  attachments AdAttachment[]
+}
+
+model AdAttachment {
+  id     String @id @default(uuid())
+  adId   String
+  url    String
+  type   String
+  meta   Json?
+  ad     Ad     @relation(fields: [adId], references: [id])
+}
+
+model TrustRequest {
+  id          String   @id @default(uuid())
+  userId      String
+  status      String   @default("pendente")
+  justificativa String?
+  provaUrl    String?
+  analisadoPor String?
+  createdAt   DateTime @default(now())
+}
+
+model TrustScoreHistory {
+  id           String   @id @default(uuid())
+  userId       String
+  pontuacaoDelta Int
+  motivo       String
+  atribuidoPor String
+  createdAt    DateTime @default(now())
+}
+
+model ModerationAction {
+  id         String   @id @default(uuid())
+  adminId    String
+  alvoTipo   String
+  alvoId     String
+  acao       String
+  motivo     String?
+  createdAt  DateTime @default(now())
+}
+
+model DirectMessage {
+  id        String   @id @default(uuid())
+  fromId    String
+  toId      String
+  content   String
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+  from      User     @relation("DirectFrom", fields: [fromId], references: [id])
+  to        User     @relation("DirectTo", fields: [toId], references: [id])
+
+  @@index([fromId, toId, createdAt])
+  @@index([toId, createdAt])
+}

@@ -1,0 +1,71 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: poketibia
+      POSTGRES_USER: poketibia
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: changeme
+      MINIO_ROOT_PASSWORD: changeme123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio:/data
+
+  backend:
+    image: node:18-alpine
+    working_dir: /app
+    command: sh -c "npm install && npx prisma generate && npm run start:dev"
+    volumes:
+      - ./backend:/app
+    environment:
+      - PORT=3000
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=poketibia
+      - POSTGRES_USER=poketibia
+      - POSTGRES_PASSWORD=changeme
+      - DATABASE_URL=postgresql://poketibia:changeme@postgres:5432/poketibia
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=changeme
+      - S3_SECRET_KEY=changeme
+      - S3_BUCKET=uploads
+      - JWT_SECRET=changeme
+      - JWT_REFRESH_SECRET=changeme
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
+
+  frontend:
+    image: nginx:alpine
+    volumes:
+      - ./frontend/web:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
+  minio:
+

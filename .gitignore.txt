@@ -1,0 +1,25 @@
+# Flutter
+build/
+.dart_tool/
+.packages
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.vscode/
+.idea/
+
+# Android / iOS
+android/.gradle/
+android/app/build/
+ios/Pods/
+
+# Env
+.env
+
+# NodeJs
+node_modules/
+.env
+logs/
+dist/

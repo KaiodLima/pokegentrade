@@ -1,0 +1,1 @@
+ C:\\Users\\kaio_\\OneDrive\\Área\ de\ Trabalho\\sistema\ poketibia\\frontend\\.dart_tool\\flutter_build\\585bfe99f7fadef494cba780842ca1e5\\dart_build_result.json: 

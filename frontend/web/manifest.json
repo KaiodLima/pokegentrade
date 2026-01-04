@@ -1,0 +1,10 @@
+{
+  "name": "Plataforma Externa",
+  "short_name": "Plataforma",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1976d2",
+  "icons": []
+}

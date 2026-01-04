@@ -1,0 +1,57 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d chrome
+
+## exception
+
+DartDevelopmentServiceException: DartDevelopmentServiceException: Failed to start Dart Development Service
+
+```
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.38.3, on Microsoft Windows [versÆo 10.0.26200.7462], locale pt-BR) [788ms]
+    [32m•[39m Flutter version 3.38.3 on channel stable at C:\Flutter\flutter
+    [32m•[39m Upstream repository https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision 19074d12f7 (6 weeks ago), 2025-11-20 17:53:13 -0500
+    [32m•[39m Engine revision 13e658725d
+    [32m•[39m Dart version 3.10.1
+    [32m•[39m DevTools version 2.51.1
+    [32m•[39m Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios, cli-animations, enable-native-assets,
+      omit-legacy-version-file, enable-lldb-debugging
+
+[32m[✓][39m Windows Version (11 Home Single Language 64-bit, 25H2, 2009) [3,8s]
+
+[32m[✓][39m Android toolchain - develop for Android devices (Android SDK version 36.1.0-rc1) [5,8s]
+    [32m•[39m Android SDK at C:\Users\kaio_\AppData\Local\Android\sdk
+    [32m•[39m Emulator version 34.1.19.0 (build_id 11525734) (CL:N/A)
+    [32m•[39m Platform android-36, build-tools 36.1.0-rc1
+    [32m•[39m Java binary at: C:\Program Files\Android\Android Studio1\jbr\bin\java
+      This is the JDK bundled with the latest Android Studio installation on this machine.
+      To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
+    [32m•[39m Java version OpenJDK Runtime Environment (build 17.0.9+0--11185874)
+    [32m•[39m All Android licenses accepted.
+
+[32m[✓][39m Chrome - develop for the web [435ms]
+    [32m•[39m Chrome at C:\Program Files\Google\Chrome\Application\chrome.exe
+
+[32m[✓][39m Visual Studio - develop Windows apps (Visual Studio Community 2022 17.7.6) [433ms]
+    [32m•[39m Visual Studio at C:\Program Files\Microsoft Visual Studio\2022\Community
+    [32m•[39m Visual Studio Community 2022 version 17.7.34221.43
+    [32m•[39m Windows 10 SDK version 10.0.22000.0
+
+[32m[✓][39m Connected device (3 available) [254ms]
+    [32m•[39m Windows (desktop) • windows • windows-x64    • Microsoft Windows [versÆo 10.0.26200.7462]
+    [32m•[39m Chrome (web)      • chrome  • web-javascript • Google Chrome 143.0.7499.170
+    [32m•[39m Edge (web)        • edge    • web-javascript • Microsoft Edge 143.0.3650.96
+
+[32m[✓][39m Network resources [1.068ms]
+    [32m•[39m All expected network resources are available.
+
+[32m•[39m No issues found!
+```
