@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 class Api {
-  static const String baseUrl = 'http://localhost:3000';
+  static const String baseUrl = 'http://localhost:8020';
   static String? _accessToken;
   static String? _refreshToken;
   static Timer? _refreshTimer;

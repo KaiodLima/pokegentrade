@@ -12,6 +12,9 @@ RUN npm ci
 # Copiar código fonte
 COPY . .
 
+# Gerar Prisma client antes do build (Prisma está em devDependencies)
+RUN npm exec prisma generate || true
+
 # Fazer build da aplicação
 RUN npm run build
 
@@ -29,6 +32,11 @@ RUN npm ci --only=production && npm cache clean --force
 # Copiar arquivos compilados do estágio anterior
 COPY --from=builder /app/dist ./dist
 
+# Copiar Prisma client gerado pelo builder para a imagem de produção
+# Isso garante que @prisma/client encontre os artefatos gerados em runtime
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+
 # Criar usuário não-root para segurança
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S pokegentrade -u 1001
@@ -44,9 +52,7 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Talvez gerar o banco
-RUN npm exec prisma generate
-RUN npm exec prisma db push
+# Prisma client already generated in builder stage. Do not run `prisma generate` or `prisma db push` during production image build.
 
 # Comando para iniciar a aplicação
 CMD ["npm", "run", "start"]

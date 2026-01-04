@@ -53,3 +53,4 @@ services:
 
 volumes:
   pokegentrade_db_data:
+  minio:

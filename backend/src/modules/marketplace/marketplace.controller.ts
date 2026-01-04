@@ -59,10 +59,10 @@ export class MarketplaceController {
   }
   @Get(':id')
   detail(@Param('id') id: string) {
-    return this.prisma.ad.findUnique({ where: { id }, include: { attachments: true } }).then((row) => {
+    return this.prisma.ad.findUnique({ where: { id }, include: { attachments: true } }).then((row: any) => {
       if (!row) throw new NotFoundException('ad_not_found');
       return row;
-    }).catch((e) => { throw e instanceof NotFoundException ? e : new InternalServerErrorException('detail_failed'); });
+    }).catch((e: any) => { throw e instanceof NotFoundException ? e : new InternalServerErrorException('detail_failed'); });
   }
 
   @Post()
