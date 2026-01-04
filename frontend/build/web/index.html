@@ -9,7 +9,15 @@
     <link rel="manifest" href="manifest.json" />
   </head>
   <body>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('sw.js').catch(function (e) {
+            console.warn('SW registration failed', e);
+          });
+        });
+      }
+    </script>
     <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>
-
