@@ -1,0 +1,55 @@
+services:
+  db:
+    build:
+      context: ./backend/database
+      dockerfile: Dockerfile
+    container_name: pokegentrade-db
+    env_file:
+      - ./backend/database/.env
+    ports:
+      - "5420:5432"
+    volumes:
+      - pokegentrade_db_data:/var/lib/postgresql/18
+
+  redis:
+    image: redis:7-alpine
+    container_name: pokegentrade-redis
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: changeme
+      MINIO_ROOT_PASSWORD: changeme123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio:/data
+  
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pokegentrade-api
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8020:3000"
+    depends_on:
+      - db
+      - redis
+  
+  frontend:
+    image: nginx:alpine
+    volumes:
+      - ./frontend/web:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  pokegentrade_db_data:

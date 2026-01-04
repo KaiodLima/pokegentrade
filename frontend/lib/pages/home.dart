@@ -174,7 +174,6 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     final hasToken = (Api.currentAccessToken() ?? widget.token)?.isNotEmpty == true;
-    print("TESTE - "+hasToken.toString());
     return Scaffold(
       appBar: (hasToken == false) ? GuestAppBar(selectedSection: "welcome",): AppBar(
         title: Text(meName != null && meName!.isNotEmpty ? 'Bem-vindo, $meName' : 'Bem-vindo'),
@@ -244,7 +243,6 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // if (!hasToken) const GuestTopMenu(),
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(image: AssetImage('assets/login_bg.png'), fit: BoxFit.cover),
