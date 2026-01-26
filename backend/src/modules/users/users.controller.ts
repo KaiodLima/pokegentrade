@@ -10,37 +10,21 @@ import argon2 from 'argon2';
 export class UsersController {
   constructor(private readonly presence: PresenceService, private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
   @Get('me')
+  @UseGuards(AuthGuard)
   async me(@Req() req: any) {
-    const auth = (req.headers?.authorization || '').toString();
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    const payload = token ? this.jwt.verifyAccess(token) : null;
-    if (payload) {
-      try {
-        const u = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-        if (u) {
-          return {
-            id: (u as any).id,
-            email: (u as any).email || '',
-            displayName: (u as any).displayName || (u as any).name || '',
-            avatarUrl: (u as any).avatarUrl || '',
-            createdAt: (u as any).createdAt ? ((u as any).createdAt as Date).toISOString() : new Date().toISOString(),
-            role: (u as any).role || payload.role,
-            status: (u as any).status || payload.status,
-            trustScore: (u as any).trustScore ?? 0,
-            deals: [],
-          };
-        }
-      } catch {}
-      return { id: payload.sub, email: '', displayName: payload.name || '', avatarUrl: '', createdAt: new Date().toISOString(), role: payload.role, status: payload.status, trustScore: 0, deals: [] };
-    }
+    const userId = (req.user?.sub || '');
+    if (!userId) throw new UnauthorizedException();
+    const u = await this.prisma.user.findUnique({ where: { id: userId } }).catch(() => null as any);
+    if (!u) throw new UnauthorizedException();
     return {
-      id: 'stub-user-id',
-      email: 'stub@example.com',
-      displayName: 'Stub User',
-      createdAt: new Date().toISOString(),
-      role: 'User',
-      status: 'ativa',
-      trustScore: 0,
+      id: (u as any).id,
+      email: (u as any).email || '',
+      displayName: (u as any).displayName || (u as any).name || '',
+      avatarUrl: (u as any).avatarUrl || '',
+      createdAt: (u as any).createdAt ? ((u as any).createdAt as Date).toISOString() : new Date().toISOString(),
+      role: (u as any).role || req.user?.role,
+      status: (u as any).status || req.user?.status,
+      trustScore: (u as any).trustScore ?? 0,
       deals: [],
     };
   }

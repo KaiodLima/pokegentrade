@@ -3,7 +3,7 @@ import '../entities/ad.dart';
 
 abstract class MarketplaceRepository {
   Future<Result<List<Ad>>> getAds();
-  Future<Result<Ad>> createAd({required String type, required String title, required String description, required double? price});
+  Future<Result<Ad>> createAd({required String type, required String title, required String description, required double? price, String? categoryId, String? serverId});
   Future<Result<bool>> addAttachment(String adId, {required String url, required String type, Map<String, dynamic>? meta});
   Future<Result<Ad>> getAdById(String adId);
   Future<Result<bool>> approve(String adId);

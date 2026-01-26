@@ -11,6 +11,8 @@ import '../features/marketplace/domain/usecases/approve_ad.dart';
 import '../features/marketplace/domain/usecases/complete_ad.dart';
 import '../features/marketplace/domain/usecases/delete_ad.dart';
 import '../features/marketplace/domain/usecases/suspend_author.dart';
+import 'dm.dart';
+import '../services/user_cache.dart';
 // import '../services/payments.dart';
 
 class MarketplaceDetailPage extends StatefulWidget {
@@ -27,6 +29,7 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
   String feedback = '';
   bool isAdmin = false;
   String? myUserId;
+  String authorName = '';
   final Color brandRed = const Color(0xFFD32F2F);
   final Color brandBlack = Colors.black;
   void _decodeRole() {
@@ -36,7 +39,7 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
         final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
         final role = payload['role']?.toString();
         final roles = (payload['roles'] is List) ? (payload['roles'] as List).map((e) => e.toString()).toList() : <String>[];
-        isAdmin = role == 'Admin' || roles.contains('Admin');
+        isAdmin = role == 'Admin' || role == 'SuperAdmin' || roles.contains('Admin') || roles.contains('SuperAdmin');
         myUserId = payload['sub']?.toString();
       }
     } catch (_) {}
@@ -55,6 +58,9 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
         'attachments': a.attachments.map((x) => {'url': x.url, 'type': x.type, 'meta': x.meta}).toList(),
         'authorId': a.authorId,
       };
+      UserCache.getName(a.authorId).then((n) {
+        if (mounted) setState(() => authorName = n);
+      });
     }
     loading = false;
     setState(() {});
@@ -172,6 +178,24 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
                                 const SizedBox(height: 8),
                                 Text(ad!['description'] ?? ''),
                                 const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.person, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text('Autor: ${authorName.isNotEmpty ? authorName : ad!['authorId'] ?? ''}'),
+                                    const Spacer(),
+                                    if ((ad?['authorId']?.toString() ?? '') != (myUserId ?? ''))
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          final uid = (ad?['authorId']?.toString() ?? '');
+                                          if (uid.isEmpty) return;
+                                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => DmPage(token: widget.token, userId: uid)));
+                                        },
+                                        child: const Text('Enviar mensagem'),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
                                 Text(t.attachments),
                                 Expanded(
                                   child: ListView.builder(
@@ -201,7 +225,7 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
                                   children: [
                                     if (isAdmin) ElevatedButton(onPressed: approve, child: Text(t.approve)),
                                     const SizedBox(width: 8),
-                                    ElevatedButton(onPressed: complete, child: Text(t.complete)),
+                                    if (isAdmin || (ad?['authorId']?.toString() == myUserId)) ElevatedButton(onPressed: complete, child: Text(t.complete)),
                                     const SizedBox(width: 8),
                                     if (isAdmin) ElevatedButton(onPressed: suspendAuthor, child: Text(t.suspendAuthor)),
                                     const SizedBox(width: 8),

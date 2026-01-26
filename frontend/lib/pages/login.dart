@@ -42,7 +42,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AppRoot()));
     } else {
       final t = AppLocalizations.of(context);
-      error = t.loginFailed;
+      error = r.error?.toString().isNotEmpty == true ? 'Erro: ${r.error}' : t.loginFailed;
       setState(() {});
     }
     loggingIn = false;

@@ -5,7 +5,7 @@ import '../../../../core/result.dart';
 class CreateAdUseCase {
   final MarketplaceRepository repo;
   CreateAdUseCase(this.repo);
-  Future<Result<Ad>> call({required String type, required String title, required String description, required double? price}) {
-    return repo.createAd(type: type, title: title, description: description, price: price);
+  Future<Result<Ad>> call({required String type, required String title, required String description, required double? price, String? categoryId, String? serverId}) {
+    return repo.createAd(type: type, title: title, description: description, price: price, categoryId: categoryId, serverId: serverId);
   }
 }

@@ -63,7 +63,7 @@ export class MessagesController {
       });
       return msg;
     } catch {
-      return { status: 'sent', roomId, content: dto.content, createdAt: new Date().toISOString() };
+      return { status: 'error', reason: 'db_unavailable' };
     }
   }
 }

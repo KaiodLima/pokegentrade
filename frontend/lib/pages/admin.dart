@@ -9,6 +9,7 @@ import '../services/api.dart';
 import '../app/locator.dart';
 import '../features/news/domain/usecases/create_news.dart';
 import '../widgets/app_modal.dart';
+import 'admin_marketplace_config.dart';
 
 class AdminPage extends StatefulWidget {
   final String token;
@@ -166,6 +167,12 @@ class _AdminPageState extends State<AdminPage> {
           'createdAt': e['createdAt'] ?? '',
           'authorId': e['authorId'] ?? '',
           'attachments': e['attachments'] ?? [],
+          'description': e['description'] ?? '',
+          'featured': (e['featured'] ?? false) == true,
+          'categoryId': (e['category'] is Map) ? ((e['category']?['id'] ?? '').toString()) : ((e['categoryId'] ?? '').toString()),
+          'categoryName': (e['category'] is Map) ? ((e['category']?['name'] ?? '').toString()) : '',
+          'serverId': (e['server'] is Map) ? ((e['server']?['id'] ?? '').toString()) : ((e['serverId'] ?? '').toString()),
+          'serverName': (e['server'] is Map) ? ((e['server']?['name'] ?? '').toString()) : '',
         }).toList();
       }
     }
@@ -554,6 +561,14 @@ class _AdminPageState extends State<AdminPage> {
                                                           ? 'Admin • Auditoria'
                                                           : 'Admin • Notícias',
                                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                        ),
+                                        const Spacer(),
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminMarketplaceConfigPage(token: widget.token)));
+                                            await load();
+                                          },
+                                          child: const Text('Configurar categorias/servidores'),
                                         ),
                                       ],
                                     ),
@@ -1748,171 +1763,106 @@ class _AdminPageState extends State<AdminPage> {
                 ],
               ),
               Spacer(),
-              Row(
-                mainAxisSize: MainAxisSize.min, 
-                children: [
-                  GestureDetector(
-                    onTap: () => approve(ad['id']),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(t.approve, style: TextStyle(color: Colors.white),),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => complete(ad['id']),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(t.complete, style: TextStyle(color: Colors.white),),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => suspendAuthor(ad['authorId']),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(t.suspendAuthor, style: TextStyle(color: Colors.white),),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      String currentType = ad['type'];
-                      String currentStatus = ad['status'];
-                      final titleCtrl = TextEditingController(text: ad['title']);
-                      final descCtrl = TextEditingController(text: ad['description']);
-                      final priceCtrl = TextEditingController(text: (ad['price'] ?? '').toString());
-                      final ok = await showDialog<bool>(context: context, builder: (_) {
-                        return AlertDialog(
-                          title: const Text('Editar anúncio'),
-                          content: Column(mainAxisSize: MainAxisSize.min, children: [
-                            DropdownButton<String>(value: currentType, items: const [
-                              DropdownMenuItem(value: 'venda', child: Text('Venda')),
-                              DropdownMenuItem(value: 'compra', child: Text('Compra')),
-                              DropdownMenuItem(value: 'troca', child: Text('Troca')),
-                            ], onChanged: (v) => currentType = v ?? 'venda'),
-                            DropdownButton<String>(value: currentStatus, items: const [
-                              DropdownMenuItem(value: 'pendente', child: Text('Pendente')),
-                              DropdownMenuItem(value: 'aprovado', child: Text('Aprovado')),
-                              DropdownMenuItem(value: 'concluido', child: Text('Concluído')),
-                            ], onChanged: (v) => currentStatus = v ?? 'pendente'),
-                            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Título')),
-                            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Descrição')),
-                            TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: 'Preço'), keyboardType: TextInputType.number),
-                          ]),
-                          actions: [
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).pop(false),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text('Cancelar', style: TextStyle(color: Colors.white),),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).pop(true),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text('Salvar', style: TextStyle(color: Colors.white),),
-                              ),
-                            ),
-                          ],
-                        );
-                      }) ?? false;
-                      if (!ok) return;
-                      await Api.setTokens(widget.token, null);
-                      final body = {
-                        'type': currentType,
-                        'status': currentStatus,
-                        'title': titleCtrl.text.trim(),
-                        'description': descCtrl.text.trim(),
-                        'price': double.tryParse(priceCtrl.text),
-                      };
-                      final res = await Api.patch('/marketplace/ads/${ad['id']}', body);
-                      feedback = res.statusCode == 200 ? 'Anúncio atualizado' : 'Falha ao atualizar';
-                      setState(() {});
-                      await load();
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text('Editar', style: TextStyle(color: Colors.white),),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      final ok = await showDialog<bool>(context: context, builder: (_) {
-                        return AlertDialog(
-                          title: const Text('Excluir anúncio?'),
-                          actions: [
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).pop(false),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text('Cancelar', style: TextStyle(color: Colors.white),),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).pop(true),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text('Confirmar', style: TextStyle(color: Colors.white),),
-                              ),
-                            ),
-                          ],
-                        );
-                      }) ?? false;
-                      if (!ok) return;
-                      await Api.setTokens(widget.token, null);
-                      final res = await Api.delete('/marketplace/ads/${ad['id']}');
-                      feedback = (res.statusCode == 200 || res.statusCode == 204) ? 'Anúncio excluído' : 'Falha ao excluir';
-                      setState(() {});
-                      await load();
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text('Excluir', style: TextStyle(color: Colors.white),),
-                    ),
-                  ),
-                ]),
             ],
+          ),
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    await Api.setTokens(widget.token, null);
+                    final res = await Api.patch('/marketplace/ads/${ad['id']}/feature', {'featured': !(ad['featured'] == true)});
+                    feedback = (res.statusCode == 200) ? ((ad['featured'] == true) ? 'Removido destaque' : 'Anúncio destacado') : 'Falha ao alterar destaque';
+                    setState(() {});
+                    await load();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
+                  },
+                  child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: Text((ad['featured'] == true) ? 'Remover destaque' : 'Destacar', style: TextStyle(color: Colors.white))),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    await Api.setTokens(widget.token, null);
+                    if ((ad['status'] ?? '') == 'aprovado') {
+                      final res = await Api.patch('/marketplace/ads/${ad['id']}', {'status': 'pendente'});
+                      feedback = res.statusCode == 200 ? 'Anúncio desaprovado' : 'Falha ao desaprovar';
+                      setState(() {});
+                      await load();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
+                    } else {
+                      approve(ad['id']);
+                    }
+                  },
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: ((ad['status'] ?? '') == 'aprovado') ? Colors.red : Colors.grey, borderRadius: BorderRadius.circular(8)),
+                    child: Text(((ad['status'] ?? '') == 'aprovado') ? 'Desaprovar' : t.approve, style: const TextStyle(color: Colors.white)),
+                  ),
+                ),
+                GestureDetector(onTap: () => complete(ad['id']), child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: Text(t.complete, style: TextStyle(color: Colors.white)))),
+                GestureDetector(onTap: () => suspendAuthor(ad['authorId']), child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: Text(t.suspendAuthor, style: TextStyle(color: Colors.white)))),
+                GestureDetector(
+                  onTap: () async {
+                    String currentType = ad['type'];
+                    String currentStatus = ad['status'];
+                    final titleCtrl = TextEditingController(text: ad['title']);
+                    final descCtrl = TextEditingController(text: ad['description']);
+                    final priceCtrl = TextEditingController(text: (ad['price'] ?? '').toString());
+                    final ok = await showDialog<bool>(context: context, builder: (_) {
+                      return AlertDialog(
+                        title: const Text('Editar anúncio'),
+                        content: Column(mainAxisSize: MainAxisSize.min, children: [
+                          DropdownButton<String>(value: currentType, items: const [DropdownMenuItem(value: 'venda', child: Text('Venda')), DropdownMenuItem(value: 'compra', child: Text('Compra')), DropdownMenuItem(value: 'troca', child: Text('Troca'))], onChanged: (v) => currentType = v ?? 'venda'),
+                          DropdownButton<String>(value: currentStatus, items: const [DropdownMenuItem(value: 'pendente', child: Text('Pendente')), DropdownMenuItem(value: 'aprovado', child: Text('Aprovado')), DropdownMenuItem(value: 'concluido', child: Text('Concluído'))], onChanged: (v) => currentStatus = v ?? 'pendente'),
+                          TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Título')),
+                          TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Descrição')),
+                          TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: 'Preço'), keyboardType: TextInputType.number),
+                        ]),
+                        actions: [
+                          GestureDetector(onTap: () => Navigator.of(context).pop(false), child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: const Text('Cancelar', style: TextStyle(color: Colors.white)))),
+                          GestureDetector(onTap: () => Navigator.of(context).pop(true), child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: const Text('Salvar', style: TextStyle(color: Colors.white)))),
+                        ],
+                      );
+                    }) ?? false;
+                    if (!ok) return;
+                    await Api.setTokens(widget.token, null);
+                    final body = {'type': currentType, 'status': currentStatus, 'title': titleCtrl.text.trim(), 'description': descCtrl.text.trim(), 'price': double.tryParse(priceCtrl.text)};
+                    final res = await Api.patch('/marketplace/ads/${ad['id']}', body);
+                    feedback = res.statusCode == 200 ? 'Anúncio atualizado' : 'Falha ao atualizar';
+                    setState(() {});
+                    await load();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
+                  },
+                  child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: const Text('Editar', style: TextStyle(color: Colors.white))),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    final ok = await showDialog<bool>(context: context, builder: (_) {
+                      return AlertDialog(
+                        title: const Text('Excluir anúncio?'),
+                        actions: [
+                          GestureDetector(onTap: () => Navigator.of(context).pop(false), child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: const Text('Cancelar', style: TextStyle(color: Colors.white)))),
+                          GestureDetector(onTap: () => Navigator.of(context).pop(true), child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: const Text('Confirmar', style: TextStyle(color: Colors.white)))),
+                        ],
+                      );
+                    }) ?? false;
+                    if (!ok) return;
+                    await Api.setTokens(widget.token, null);
+                    final res = await Api.delete('/marketplace/ads/${ad['id']}');
+                    feedback = (res.statusCode == 200 || res.statusCode == 204) ? 'Anúncio excluído' : 'Falha ao excluir';
+                    setState(() {});
+                    await load();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
+                  },
+                  child: Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)), child: const Text('Excluir', style: TextStyle(color: Colors.white))),
+                ),
+              ],
+            ),
           ),
           Divider(),
         ],

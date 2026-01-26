@@ -3,6 +3,7 @@ import '../../../core/http_client.dart';
 import '../../../core/result.dart';
 import '../domain/repositories/marketplace_repository.dart';
 import '../domain/entities/ad.dart';
+import '../../../services/api.dart';
 
 class MarketplaceRepositoryImpl implements MarketplaceRepository {
   final HttpClient http;
@@ -10,24 +11,43 @@ class MarketplaceRepositoryImpl implements MarketplaceRepository {
   @override
   Future<Result<List<Ad>>> getAds() async {
     final res = await http.get('/marketplace/ads');
+    List<Ad> base = [];
     if (res.statusCode == 200) {
       try {
         final list = jsonDecode(res.body);
-        if (list is List) {
-          return Result.ok(list.map<Ad>((e) => Ad.fromMap(e as Map)).toList());
-        }
+        if (list is List) base = list.map<Ad>((e) => Ad.fromMap(e as Map)).toList();
       } catch (_) {}
-      return const Result.ok(<Ad>[]);
+    } else {
+      return Result.err('Erro ${res.statusCode}');
     }
-    return Result.err('Erro ${res.statusCode}');
+    if ((Api.currentAccessToken() ?? '').isNotEmpty) {
+      final mine = await http.get('/marketplace/ads/mine');
+      if (mine.statusCode == 200) {
+        try {
+          final list = jsonDecode(mine.body);
+          if (list is List) {
+            final extra = list.map<Ad>((e) => Ad.fromMap(e as Map)).toList();
+            final ids = <String>{...base.map((a) => a.id)};
+            for (final a in extra) {
+              if (!ids.contains(a.id)) base.add(a);
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return Result.ok(base);
   }
   @override
-  Future<Result<Ad>> createAd({required String type, required String title, required String description, required double? price}) async {
-    final res = await http.post('/marketplace/ads', {'type': type, 'title': title, 'description': description, 'price': price});
+  Future<Result<Ad>> createAd({required String type, required String title, required String description, required double? price, String? categoryId, String? serverId}) async {
+    final payload = {'type': type, 'title': title, 'description': description, 'price': price, if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId, if (serverId != null && serverId.isNotEmpty) 'serverId': serverId};
+    final res = await http.post('/marketplace/ads', payload);
     if (res.statusCode == 201 || res.statusCode == 200) {
       try {
         final j = jsonDecode(res.body);
         if (j is Map) {
+          if ((j['status'] ?? '') == 'blocked') {
+            return Result.err(jsonEncode(j));
+          }
           return Result.ok(Ad.fromMap(j));
         }
       } catch (_) {}

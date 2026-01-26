@@ -23,8 +23,16 @@ class MarketplaceListPage extends StatefulWidget {
 
 class _MarketplaceListPageState extends State<MarketplaceListPage> {
   List<Map<String, dynamic>> ads = [];
+  String? meId;
   final Color brandRed = const Color(0xFFD32F2F);
   final Color brandBlack = Colors.black;
+  bool onlyMine = false;
+  String typeFilter = 'todos';
+  String sortKey = 'data';
+  String categoryFilter = 'todos';
+  String serverFilter = 'todos';
+  List<Map<String, String>> categories = [];
+  List<Map<String, String>> servers = [];
   List<String> _priceParts(String price) {
     final clean = price.replaceAll(RegExp(r'[^0-9.]'), '');
     final d = double.tryParse(clean) ?? 0.0;
@@ -33,7 +41,42 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
     final fracPart = (cents % 100).toString().padLeft(2, '0');
     return [intPart, fracPart];
   }
+  double _priceValue(String price) {
+    final clean = price.replaceAll(RegExp(r'[^0-9.]'), '');
+    return double.tryParse(clean) ?? 0.0;
+  }
+  List<Map<String, dynamic>> _filteredSortedAds() {
+    var list = List<Map<String, dynamic>>.from(ads);
+    list = list.where((m) {
+      if (onlyMine && (m['authorId']?.toString() ?? '') != (meId ?? '')) return false;
+      if (typeFilter != 'todos' && (m['type']?.toString() ?? '') != typeFilter) return false;
+      if (categoryFilter != 'todos' && (m['categoryId']?.toString() ?? '') != categoryFilter) return false;
+      if (serverFilter != 'todos' && (m['serverId']?.toString() ?? '') != serverFilter) return false;
+      return true;
+    }).toList();
+    if (sortKey == 'data') {
+      list.sort((a, b) {
+        final ad = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bd = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bd.compareTo(ad);
+      });
+    } else if (sortKey == 'preco') {
+      list.sort((a, b) => _priceValue((b['price'] ?? '').toString()).compareTo(_priceValue((a['price'] ?? '').toString())));
+    } else {
+      list.sort((a, b) => (a['title'] ?? '').toString().toLowerCase().compareTo((b['title'] ?? '').toString().toLowerCase()));
+    }
+    return list;
+  }
   Future<void> load() async {
+    if (widget.token.isNotEmpty) {
+      try {
+        final res = await Api.get('/users/me');
+        if (res.statusCode == 200) {
+          final j = jsonDecode(res.body);
+          if (j is Map) meId = (j['id'] ?? '').toString();
+        }
+      } catch (_) {}
+    }
     final r = await GetAdsUseCase(Locator.marketplace)();
     if (r.isOk) {
       final list = r.data ?? [];
@@ -45,7 +88,18 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
         'status': a.status,
         'createdAt': a.createdAt,
         'attachments': a.attachments.map((x) => x.toMap()).toList(),
-      }).where((m) => (m['status']?.toString() ?? '') == 'aprovado').toList();
+        'authorId': a.authorId,
+        'categoryId': a.categoryId,
+        'categoryName': a.categoryName ?? '',
+        'serverId': a.serverId,
+        'serverName': a.serverName ?? '',
+        'featured': a.featured,
+      }).where((m) {
+        final st = (m['status']?.toString() ?? '');
+        if (st == 'aprovado') return true;
+        if (st == 'pendente' && (m['authorId']?.toString() ?? '') == (meId ?? '')) return true;
+        return false;
+      }).toList();
       setState(() {});
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -81,6 +135,24 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
+    void loadMeta() async {
+      try {
+        final rc = await Api.get('/marketplace/categories');
+        if (rc.statusCode == 200) {
+          final list = jsonDecode(rc.body);
+          if (list is List) categories = list.map<Map<String, String>>((e) => {'id': (e['id'] ?? '').toString(), 'name': (e['name'] ?? '').toString()}).toList();
+        }
+        final rs = await Api.get('/marketplace/servers');
+        if (rs.statusCode == 200) {
+          final list = jsonDecode(rs.body);
+          if (list is List) servers = list.map<Map<String, String>>((e) => {'id': (e['id'] ?? '').toString(), 'name': (e['name'] ?? '').toString()}).toList();
+        }
+      } catch (_) {}
+      setState(() {});
+    }
+    if (categories.isEmpty && servers.isEmpty) {
+      loadMeta();
+    }
     final content = Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 980),
@@ -138,18 +210,107 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
                   ],
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Card(
+                  elevation: 0,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(value: onlyMine, onChanged: (v) => setState(() => onlyMine = v ?? false)),
+                            const Text('Meus anúncios'),
+                          ],
+                        ),
+                        SizedBox(
+                          width: 160,
+                          child: DropdownButtonFormField<String>(
+                            value: typeFilter,
+                            items: const [
+                              DropdownMenuItem(value: 'todos', child: Text('Todos')),
+                              DropdownMenuItem(value: 'venda', child: Text('Venda')),
+                              DropdownMenuItem(value: 'compra', child: Text('Compra')),
+                              DropdownMenuItem(value: 'troca', child: Text('Troca')),
+                            ],
+                            onChanged: (v) => setState(() => typeFilter = v ?? 'todos'),
+                            decoration: const InputDecoration(filled: true, border: OutlineInputBorder()),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 200,
+                          child: DropdownButtonFormField<String>(
+                            value: categoryFilter,
+                            items: [
+                              const DropdownMenuItem(value: 'todos', child: Text('Todas categorias')),
+                              ...categories.map((c) => DropdownMenuItem(value: c['id'], child: Text(c['name'] ?? ''))),
+                            ],
+                            onChanged: (v) => setState(() => categoryFilter = v ?? 'todos'),
+                            decoration: const InputDecoration(filled: true, border: OutlineInputBorder()),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 200,
+                          child: DropdownButtonFormField<String>(
+                            value: serverFilter,
+                            items: [
+                              const DropdownMenuItem(value: 'todos', child: Text('Todos servidores')),
+                              ...servers.map((s) => DropdownMenuItem(value: s['id'], child: Text(s['name'] ?? ''))),
+                            ],
+                            onChanged: (v) => setState(() => serverFilter = v ?? 'todos'),
+                            decoration: const InputDecoration(filled: true, border: OutlineInputBorder()),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 180,
+                          child: DropdownButtonFormField<String>(
+                            value: sortKey,
+                            items: const [
+                              DropdownMenuItem(value: 'data', child: Text('Ordenar por data')),
+                              DropdownMenuItem(value: 'preco', child: Text('Ordenar por preço')),
+                              DropdownMenuItem(value: 'nome', child: Text('Ordenar por nome')),
+                            ],
+                            onChanged: (v) => setState(() => sortKey = v ?? 'data'),
+                            decoration: const InputDecoration(filled: true, border: OutlineInputBorder()),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              onlyMine = false;
+                              typeFilter = 'todos';
+                              categoryFilter = 'todos';
+                              serverFilter = 'todos';
+                              sortKey = 'data';
+                            });
+                          },
+                          child: const Text('Limpar filtros'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final maxW = constraints.maxWidth;
                     final cross = (maxW / 280).floor().clamp(2, 6);
+                    final visibles = _filteredSortedAds();
                     return Padding(
                       padding: const EdgeInsets.all(12),
                       child: GridView.builder(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cross, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.72),
-                        itemCount: ads.length,
+                        itemCount: visibles.length,
                         itemBuilder: (_, i) {
-                          final a = ads[i];
+                          final a = visibles[i];
                           final atts = (a['attachments'] as List? ?? []);
                           final firstImg = atts.cast<Map>().firstWhere((x) => (x['type']?.toString() ?? '').startsWith('image/'), orElse: () => {});
                           final imgUrl = Sanitize.sanitizeImageUrl((firstImg['url']?.toString() ?? ''));
@@ -159,11 +320,28 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
                               Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketplaceDetailPage(token: widget.token, adId: a['id'])));
                             },
                             child: Card(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: (a['featured'] == true) ? BorderSide(color: brandRed, width: 2) : BorderSide.none,
+                              ),
                               elevation: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                if ((a['status']?.toString() ?? '') == 'pendente' && (a['authorId']?.toString() ?? '') == (meId ?? ''))
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                    decoration: BoxDecoration(color: Colors.amber.shade600, borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12))),
+                                    child: const Text('aguardando aprovação do admin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                  ),
+                                if ((a['featured'] == true))
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                    decoration: const BoxDecoration(color: Color(0xFFD32F2F), borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12))),
+                                    child: const Text('Destaque', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                  ),
                                   ClipRRect(
                                     borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
                                     child: imgUrl.isNotEmpty
@@ -185,6 +363,8 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
                                             Text(parts[1], style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 14)),
                                           ],
                                         ),
+                                        const SizedBox(height: 6),
+                                        Text('Tipo: ${a['type']} • Categoria: ${(a['categoryName'] ?? '')} • Servidor: ${(a['serverName'] ?? '')}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
                                       ],
                                     ),
                                   ),

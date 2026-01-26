@@ -22,6 +22,10 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
   final descCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
   String type = 'venda';
+  String? categoryId;
+  String? serverId;
+  List<Map<String, String>> categories = [];
+  List<Map<String, String>> servers = [];
   String feedback = '';
   String? actionText;
   List<PlatformFile> files = [];
@@ -70,7 +74,13 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
     final payloadTitle = titleCtrl.text;
     final payloadDesc = descCtrl.text;
     final payloadPrice = double.tryParse(priceCtrl.text);
-    final createRes = await CreateAdUseCase(Locator.marketplace)(type: payloadType, title: payloadTitle, description: payloadDesc, price: payloadPrice);
+    if (payloadTitle.trim().isEmpty || payloadDesc.trim().isEmpty) {
+      feedback = 'Informe título e descrição';
+      actionText = null;
+      setState(() {});
+      return;
+    }
+    final createRes = await CreateAdUseCase(Locator.marketplace)(type: payloadType, title: payloadTitle, description: payloadDesc, price: payloadPrice, categoryId: categoryId, serverId: serverId);
     if (createRes.isOk && createRes.data != null) {
       final ad = createRes.data!;
       int index = 0;
@@ -163,13 +173,39 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
           }
         }
       }
-      feedback = 'Criado';
+      final msg = (ad.status.toLowerCase() == 'pendente')
+          ? 'anúncio criado e aguardando aprovação do admin'
+          : 'Anúncio criado com sucesso';
+      feedback = msg;
       actionText = null;
       setState(() {});
-      Navigator.of(context).pop();
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Marketplace'),
+          content: Text(msg),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(_).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      Navigator.of(context).pop(true);
       return;
     }
-    feedback = 'Erro ao criar';
+    try {
+      final aj = jsonDecode(createRes.error ?? '{}');
+      if (aj is Map && (aj['status'] ?? '') == 'blocked') {
+        final ms = (aj['remainingMs'] ?? 0).toString();
+        feedback = 'Muitas requisições, aguarde $ms ms';
+        actionText = 'Tentar novamente';
+        setState(() {});
+        return;
+      }
+    } catch (_) {}
+    feedback = 'Erro ao criar (verifique os campos e tente novamente)';
     actionText = 'Tentar novamente';
     setState(() {});
   }
@@ -177,6 +213,29 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
+    void loadMeta() async {
+      try {
+        final rc = await Api.get('/marketplace/categories');
+        if (rc.statusCode == 200) {
+          final list = jsonDecode(rc.body);
+          if (list is List) {
+            categories = list.map<Map<String, String>>((e) => {'id': (e['id'] ?? '').toString(), 'name': (e['name'] ?? '').toString()}).toList();
+            setState(() {});
+          }
+        }
+        final rs = await Api.get('/marketplace/servers');
+        if (rs.statusCode == 200) {
+          final list = jsonDecode(rs.body);
+          if (list is List) {
+            servers = list.map<Map<String, String>>((e) => {'id': (e['id'] ?? '').toString(), 'name': (e['name'] ?? '').toString()}).toList();
+            setState(() {});
+          }
+        }
+      } catch (_) {}
+    }
+    if (categories.isEmpty && servers.isEmpty) {
+      loadMeta();
+    }
     return Scaffold(
       appBar: AppBar(title: Text(t.newAd)),
       body: Stack(
@@ -231,6 +290,26 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
                         ],
                         decoration: InputDecoration(prefixIcon: Icon(Icons.category, color: brandRed), filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
                         onChanged: (v) => setState(() => type = v ?? 'venda'),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: categoryId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Selecione um tipo')),
+                          ...categories.map((c) => DropdownMenuItem(value: c['id'], child: Text(c['name'] ?? ''))),
+                        ],
+                        decoration: InputDecoration(prefixIcon: Icon(Icons.label, color: brandRed), filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), labelText: 'Tipo do item'),
+                        onChanged: (v) => setState(() => categoryId = v),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: serverId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Selecione um servidor')),
+                          ...servers.map((s) => DropdownMenuItem(value: s['id'], child: Text(s['name'] ?? ''))),
+                        ],
+                        decoration: InputDecoration(prefixIcon: Icon(Icons.storage, color: brandRed), filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), labelText: 'Servidor'),
+                        onChanged: (v) => setState(() => serverId = v),
                       ),
                       const SizedBox(height: 8),
                       TextField(controller: titleCtrl, decoration: InputDecoration(labelText: t.title, prefixIcon: Icon(Icons.title, color: brandRed), filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)))),

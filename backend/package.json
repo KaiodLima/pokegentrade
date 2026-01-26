@@ -9,7 +9,14 @@
     "build": "tsc -p tsconfig.json",
     "test:auth": "node scripts/test-auth.js",
     "test:marketplace": "node scripts/test-marketplace.js",
-    "seed:dev": "ts-node scripts/seed-dev.ts"
+    "test:marketplace-admin": "node scripts/test-marketplace-admin.js",
+    "test:rooms": "node scripts/test-rooms.js",
+    "test:dmdb": "node scripts/test-dm-db.js",
+    "seed:dev": "ts-node scripts/seed-dev.ts",
+    "seed:db": "prisma db seed"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -38,5 +45,9 @@
     "prisma": "^5.7.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
+  }
+  ,
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

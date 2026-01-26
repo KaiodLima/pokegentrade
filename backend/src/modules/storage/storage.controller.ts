@@ -55,14 +55,12 @@ export class StorageController {
           return { uploadUrl: p, method: 'PUT', headers: { 'Content-Type': ct } };
         }
       }).catch(() => {
-        const url = `${endpoint}/${bucket}/${encodeURIComponent(sanitized)}?content-type=${encodeURIComponent(ct)}&stub=true`;
-        return { uploadUrl: url, method: 'PUT', headers: { 'Content-Type': ct } };
+        this.presignBlockedCounter.labels('storage_unavailable').inc();
+        return { status: 'blocked', reason: 'storage_unavailable' };
       });
     } catch {
-      const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
-      const bucket = process.env.S3_BUCKET || 'uploads';
-      const url = `${endpoint}/${bucket}/${encodeURIComponent(sanitized)}?content-type=${encodeURIComponent(ct)}&stub=true`;
-      return { uploadUrl: url, method: 'PUT', headers: { 'Content-Type': ct } };
+      this.presignBlockedCounter.labels('storage_unavailable').inc();
+      return { status: 'blocked', reason: 'storage_unavailable' };
     }
   }
 }
