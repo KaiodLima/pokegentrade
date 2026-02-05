@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'marketplace_detail.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'dart:async';
+import 'dart:typed_data';
 import '../l10n/app_localizations.dart';
 import '../services/sanitize.dart';
 import '../services/api.dart';
@@ -10,6 +12,8 @@ import '../app/locator.dart';
 import '../features/news/domain/usecases/create_news.dart';
 import '../widgets/app_modal.dart';
 import 'admin_marketplace_config.dart';
+import '../features/marketplace/domain/usecases/create_ad.dart';
+import '../features/marketplace/domain/usecases/add_attachment.dart';
 
 class AdminPage extends StatefulWidget {
   final String token;
@@ -783,25 +787,75 @@ class _AdminPageState extends State<AdminPage> {
                                         widthFactor: 0.7,
                                         child: GestureDetector(
                                           onTap: () async {
-                                            final result = await showDialog<Map<String, dynamic>>(context: context, builder: (_) {
-                                              String current = 'venda';
-                                              final titleCtrl = TextEditingController();
-                                              final descCtrl = TextEditingController();
-                                              final priceCtrl = TextEditingController();
-                                              PlatformFile? imageFile;
-                                              return StatefulBuilder(builder: (ctx, setStateDialog) {
-                                                return AlertDialog(
-                                                  title: const Text('Novo anúncio'),
+                                            final t2 = AppLocalizations.of(context);
+                                            String current = 'venda';
+                                            final titleCtrl = TextEditingController();
+                                            final descCtrl = TextEditingController();
+                                            final priceCtrl = TextEditingController();
+                                            String? categoryId;
+                                            String? serverId;
+                                            List<Map<String, String>> categories = [];
+                                            List<Map<String, String>> servers = [];
+                                            List<PlatformFile> files = [];
+                                            List<String> fileStatuses = [];
+                                            String dlgFeedback = '';
+                                            String? actionText;
+                                            Future<void> loadMeta() async {
+                                              try {
+                                                await Api.setTokens(widget.token, null);
+                                                final rc = await Api.get('/marketplace/categories');
+                                                if (rc.statusCode == 200) {
+                                                  final list = jsonDecode(rc.body);
+                                                  if (list is List) categories = list.map<Map<String, String>>((e) => {'id': (e['id'] ?? '').toString(), 'name': (e['name'] ?? '').toString()}).toList();
+                                                }
+                                                final rs = await Api.get('/marketplace/servers');
+                                                if (rs.statusCode == 200) {
+                                                  final list = jsonDecode(rs.body);
+                                                  if (list is List) servers = list.map<Map<String, String>>((e) => {'id': (e['id'] ?? '').toString(), 'name': (e['name'] ?? '').toString()}).toList();
+                                                }
+                                              } catch (_) {}
+                                            }
+                                            String _contentTypeFor(PlatformFile f) {
+                                              final ext = (f.extension ?? '').toLowerCase();
+                                              switch (ext) {
+                                                case 'png': return 'image/png';
+                                                case 'jpg':
+                                                case 'jpeg': return 'image/jpeg';
+                                                case 'gif': return 'image/gif';
+                                                case 'webp': return 'image/webp';
+                                                case 'pdf': return 'application/pdf';
+                                                case 'txt': return 'text/plain';
+                                                default: return 'application/octet-stream';
+                                              }
+                                            }
+                                            Future<Uint8List?> _fileBytes(PlatformFile pf) async {
+                                              if (pf.bytes != null) return pf.bytes!;
+                                              if (pf.readStream != null) {
+                                                final chunks = <int>[];
+                                                final completer = Completer<Uint8List>();
+                                                pf.readStream!.listen((data) {
+                                                  chunks.addAll(data);
+                                                }, onDone: () => completer.complete(Uint8List.fromList(chunks)), onError: (_) => completer.complete(null), cancelOnError: true);
+                                                return completer.future;
+                                              }
+                                              return null;
+                                            }
+                                            await loadMeta();
+                                            final ok = await showDialog<bool>(context: context, barrierDismissible: false, builder: (_) {
+                                              return StatefulBuilder(builder: (ctx, setDialog) {
+                                                return AppModal(
+                                                  title: t2.newAd,
+                                                  actions: [
+                                                    TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(t2.cancel)),
+                                                    const SizedBox(width: 6),
+                                                    ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(t2.confirm)),
+                                                  ],
                                                   content: Column(mainAxisSize: MainAxisSize.min, children: [
-                                                    DropdownButtonFormField<String>(
-                                                      initialValue: current,
-                                                      items: const [
-                                                        DropdownMenuItem(value: 'venda', child: Text('Venda')),
-                                                        DropdownMenuItem(value: 'compra', child: Text('Compra')),
-                                                        DropdownMenuItem(value: 'troca', child: Text('Troca')),
-                                                      ],
-                                                      onChanged: (v) => setStateDialog(() => current = v ?? 'venda'),
-                                                    ),
+                                                    DropdownButtonFormField<String>(value: current, items: const [
+                                                      DropdownMenuItem(value: 'venda', child: Text('Venda')),
+                                                      DropdownMenuItem(value: 'compra', child: Text('Compra')),
+                                                      DropdownMenuItem(value: 'troca', child: Text('Troca')),
+                                                    ], onChanged: (v) => setDialog(() => current = v ?? 'venda')),
                                                     const SizedBox(height: 8),
                                                     TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Título')),
                                                     const SizedBox(height: 8),
@@ -809,119 +863,138 @@ class _AdminPageState extends State<AdminPage> {
                                                     const SizedBox(height: 8),
                                                     TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: 'Preço'), keyboardType: TextInputType.number),
                                                     const SizedBox(height: 8),
-                                                    Row(
-                                                      children: [
-                                                        GestureDetector(
-                                                          onTap: () async {
-                                                            final res = await FilePicker.platform.pickFiles(withReadStream: true, allowMultiple: false, type: FileType.custom, allowedExtensions: ['png','jpg','jpeg','gif','webp']);
-                                                            if (res != null && res.files.isNotEmpty) {
-                                                              setStateDialog(() => imageFile = res.files.first);
-                                                            }
-                                                          },
-                                                          child: Container(
-                                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                            decoration: BoxDecoration(
-                                                              color: Colors.grey,
-                                                              borderRadius: BorderRadius.circular(8),
-                                                            ),
-                                                            child: const Text('Selecionar imagem', style: TextStyle(color: Colors.white),),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        Expanded(child: Text(imageFile?.name ?? 'Nenhuma imagem selecionada', overflow: TextOverflow.ellipsis)),
-                                                      ],
+                                                    DropdownButtonFormField<String>(
+                                                      value: categoryId,
+                                                      hint: const Text('Categoria (opcional)'),
+                                                      items: categories.map((c) => DropdownMenuItem(value: c['id'], child: Text(c['name'] ?? ''))).toList(),
+                                                      onChanged: (v) => setDialog(() => categoryId = v),
+                                                      decoration: const InputDecoration(filled: true, border: OutlineInputBorder()),
                                                     ),
+                                                    const SizedBox(height: 8),
+                                                    DropdownButtonFormField<String>(
+                                                      value: serverId,
+                                                      hint: const Text('Servidor (opcional)'),
+                                                      items: servers.map((s) => DropdownMenuItem(value: s['id'], child: Text(s['name'] ?? ''))).toList(),
+                                                      onChanged: (v) => setDialog(() => serverId = v),
+                                                      decoration: const InputDecoration(filled: true, border: OutlineInputBorder()),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(children: [
+                                                      GestureDetector(
+                                                        onTap: () async {
+                                                          final res = await FilePicker.platform.pickFiles(withReadStream: true, allowMultiple: true, type: FileType.custom, allowedExtensions: ['png','jpg','jpeg','gif','webp','pdf','txt']);
+                                                          if (res != null) {
+                                                            final maxBytes = 5 * 1024 * 1024;
+                                                            final selected = res.files;
+                                                            final allowedExt = {'png','jpg','jpeg','gif','webp','pdf','txt'};
+                                                            final allowed = selected.where((f) => f.size <= maxBytes && allowedExt.contains((f.extension ?? '').toLowerCase())).toList();
+                                                            files = allowed;
+                                                            fileStatuses = List.generate(files.length, (_) => 'Pendente');
+                                                            if (allowed.length != selected.length) dlgFeedback = 'Alguns arquivos ignorados (>5MB ou tipo inválido)';
+                                                            setDialog(() {});
+                                                          }
+                                                        },
+                                                        child: Container(
+                                                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                          decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)),
+                                                          child: const Text('Selecionar arquivos', style: TextStyle(color: Colors.white),),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(child: Text(files.isEmpty ? 'Nenhum arquivo' : '${files.length} selecionado(s)', overflow: TextOverflow.ellipsis)),
+                                                    ]),
+                                                    const SizedBox(height: 6),
+                                                    if (files.isNotEmpty)
+                                                      SizedBox(
+                                                        height: 120,
+                                                        child: ListView.builder(
+                                                          itemCount: files.length,
+                                                          itemBuilder: (_, i) => ListTile(title: Text(files[i].name), trailing: Text(fileStatuses[i])),
+                                                        ),
+                                                      ),
+                                                    const SizedBox(height: 8),
+                                                    if (dlgFeedback.isNotEmpty) Text(dlgFeedback),
+                                                    if (actionText != null) Text(actionText!),
                                                   ]),
-                                                  actions: [
-                                                    GestureDetector(
-                                                      onTap: () => Navigator.of(context).pop(null),
-                                                      child: Container(
-                                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.grey,
-                                                          borderRadius: BorderRadius.circular(8),
-                                                        ),
-                                                        child: const Text('Cancelar', style: TextStyle(color: Colors.white),),
-                                                      ),
-                                                    ),
-                                                    GestureDetector(
-                                                      onTap: () {
-                                                        Navigator.of(context).pop({
-                                                          'type': current,
-                                                          'title': titleCtrl.text.trim(),
-                                                          'description': descCtrl.text.trim(),
-                                                          'price': double.tryParse(priceCtrl.text),
-                                                          'file': imageFile,
-                                                        });
-                                                      },
-                                                      child: Container(
-                                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.grey,
-                                                          borderRadius: BorderRadius.circular(8),
-                                                        ),
-                                                        child: const Text('Criar', style: TextStyle(color: Colors.white),),
-                                                      ),
-                                                    ),
-                                                  ],
                                                 );
                                               });
-                                            });
-                                            if (result != null) {
-                                              await Api.setTokens(widget.token, null);
-                                              final res = await Api.post('/marketplace/ads', {
-                                                'type': result['type'],
-                                                'title': result['title'],
-                                                'description': result['description'],
-                                                'price': result['price'],
-                                              });
-                                              if (res.statusCode == 200 || res.statusCode == 201) {
-                                                final ad = jsonDecode(res.body);
-                                                final PlatformFile? f = result['file'] as PlatformFile?;
-                                                if (f != null && f.bytes != null) {
-                                                  String ctype;
-                                                  final ext = (f.extension ?? '').toLowerCase();
-                                                  switch (ext) {
-                                                    case 'png': ctype = 'image/png'; break;
-                                                    case 'jpg':
-                                                    case 'jpeg': ctype = 'image/jpeg'; break;
-                                                    case 'gif': ctype = 'image/gif'; break;
-                                                    case 'webp': ctype = 'image/webp'; break;
-                                                    default: ctype = 'application/octet-stream';
+                                            }) ?? false;
+                                            if (!ok) return;
+                                            await Api.setTokens(widget.token, null);
+                                            final createRes = await CreateAdUseCase(Locator.marketplace)(type: current, title: titleCtrl.text.trim(), description: descCtrl.text.trim(), price: double.tryParse(priceCtrl.text), categoryId: categoryId, serverId: serverId);
+                                            if (!(createRes.isOk && createRes.data != null)) {
+                                              feedback = 'Falha ao criar anúncio';
+                                              setState(() {});
+                                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
+                                              return;
+                                            }
+                                            final ad = createRes.data!;
+                                            for (int i = 0; i < files.length; i++) {
+                                              final f = files[i];
+                                              fileStatuses[i] = 'Enviando';
+                                              setState(() {});
+                                              final ctype = _contentTypeFor(f);
+                                              final pres = await Api.post('/uploads', {'filename': f.name, 'contentType': ctype});
+                                              if (pres.statusCode == 429) {
+                                                feedback = 'Muitas requisições, tente novamente';
+                                                setState(() {});
+                                                break;
+                                              }
+                                              if (pres.statusCode == 200 || pres.statusCode == 201) {
+                                                final p = jsonDecode(pres.body);
+                                                if (p is Map && (p['status'] ?? '') == 'blocked') {
+                                                  feedback = 'Armazenamento indisponível';
+                                                  setState(() {});
+                                                  break;
+                                                }
+                                                final bytes = await _fileBytes(f);
+                                                if (bytes == null) {
+                                                  fileStatuses[i] = 'Falha';
+                                                  setState(() {});
+                                                  continue;
+                                                }
+                                                String objectUrl = '';
+                                                if ((p['method'] ?? '') == 'POST') {
+                                                  final uri = Uri.parse(p['postUrl']);
+                                                  final req = http.MultipartRequest('POST', uri);
+                                                  final fields = (p['fields'] as Map?) ?? {};
+                                                  fields.forEach((k, v) => req.fields[k] = v.toString());
+                                                  req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: f.name));
+                                                  final resp = await req.send();
+                                                  if (resp.statusCode == 204 || resp.statusCode == 201) {
+                                                    objectUrl = (p['objectUrl'] ?? '').toString();
+                                                  } else {
+                                                    fileStatuses[i] = 'Falha';
+                                                    setState(() {});
+                                                    continue;
                                                   }
-                                                  final pres = await Api.post('/uploads', {'filename': f.name, 'contentType': ctype});
-                                                  if (pres.statusCode == 200 || pres.statusCode == 201) {
-                                                    final p = jsonDecode(pres.body);
-                                                    String objectUrl = '';
-                                                    if ((p['method'] ?? '') == 'POST') {
-                                                      final uri = Uri.parse(p['postUrl']);
-                                                      final req = http.MultipartRequest('POST', uri);
-                                                      final fields = (p['fields'] as Map?) ?? {};
-                                                      fields.forEach((k, v) => req.fields[k] = v.toString());
-                                                      req.files.add(http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name));
-                                                      final resp = await req.send();
-                                                      if (resp.statusCode == 204 || resp.statusCode == 201) {
-                                                        objectUrl = (p['objectUrl'] ?? '').toString();
-                                                      }
-                                                    } else {
-                                                      await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ctype}, body: f.bytes);
-                                                      objectUrl = p['uploadUrl'].toString().split('?').first;
-                                                    }
-                                                    if (objectUrl.isNotEmpty) {
-                                                      await Api.post('/marketplace/ads/${ad['id']}/attachments', {'url': objectUrl, 'type': ctype, 'meta': {'size': f.size}});
-                                                    }
+                                                } else if ((p['method'] ?? '') == 'PUT') {
+                                                  await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ctype}, body: bytes);
+                                                  objectUrl = p['uploadUrl'].toString().split('?').first;
+                                                } else if ((p['method'] ?? '') == 'PROXY') {
+                                                  final resp = await Api.post('/uploads/direct', {'filename': f.name, 'contentType': ctype, 'base64': base64Encode(bytes)});
+                                                  if (resp.statusCode == 200 || resp.statusCode == 201) {
+                                                    final j = jsonDecode(resp.body);
+                                                    objectUrl = (j['objectUrl'] ?? '').toString();
+                                                  } else {
+                                                    fileStatuses[i] = 'Falha';
+                                                    setState(() {});
+                                                    continue;
                                                   }
                                                 }
-                                                feedback = 'Anúncio criado';
+                                                final attRes = await AddAttachmentUseCase(Locator.marketplace)(ad.id, url: objectUrl, type: ctype, meta: {'size': f.size});
+                                                if (attRes.isOk) {
+                                                  fileStatuses[i] = 'Enviado';
+                                                } else {
+                                                  fileStatuses[i] = 'Falha ao anexar';
+                                                }
                                                 setState(() {});
-                                                await load();
-                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
-                                              } else {
-                                                feedback = 'Falha ao criar anúncio';
-                                                setState(() {});
-                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
                                               }
                                             }
+                                            feedback = 'Anúncio criado';
+                                            setState(() {});
+                                            await load();
+                                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
                                           },
                                           child: Container(
                                             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1008,7 +1081,7 @@ class _AdminPageState extends State<AdminPage> {
                                             leading: ClipRRect(
                                               borderRadius: BorderRadius.circular(8),
                                               child: ((u['avatarUrl'] ?? '') as String).isNotEmpty
-                                                  ? Image.network((u['avatarUrl'] ?? ''), width: 48, height: 48, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.person)))
+                                                  ? Image.network(Sanitize.sanitizeImageUrl((u['avatarUrl'] ?? '')), width: 48, height: 48, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.person)))
                                                   : Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.person)),
                                             ),
                                             title: Text('${u['displayName']} • ${u['email']}'),
@@ -1375,6 +1448,18 @@ class _AdminPageState extends State<AdminPage> {
                                             final titleCtrl = TextEditingController();
                                             final contentCtrl = TextEditingController();
                                             List<String> attachments = [];
+                                            Future<Uint8List?> _fileBytes(PlatformFile pf) async {
+                                              if (pf.bytes != null) return pf.bytes!;
+                                              if (pf.readStream != null) {
+                                                final chunks = <int>[];
+                                                final completer = Completer<Uint8List>();
+                                                pf.readStream!.listen((data) {
+                                                  chunks.addAll(data);
+                                                }, onDone: () => completer.complete(Uint8List.fromList(chunks)), onError: (_) => completer.complete(null), cancelOnError: true);
+                                                return completer.future;
+                                              }
+                                              return null;
+                                            }
                                             final ok = await showDialog<bool>(context: context, builder: (_) {
                                               return StatefulBuilder(builder: (ctx, set) {
                                                 return AlertDialog(
@@ -1391,25 +1476,33 @@ class _AdminPageState extends State<AdminPage> {
                                                           for (final f in res.files) {
                                                             final allowedExt = {'png','jpg','jpeg','gif','webp'};
                                                             final ext = (f.extension ?? '').toLowerCase();
-                                                            if (!allowedExt.contains(ext) || (f.bytes == null)) continue;
+                                                            if (!allowedExt.contains(ext)) continue;
                                                             final ct = ext == 'png' ? 'image/png' : (ext == 'gif' ? 'image/gif' : (ext == 'webp' ? 'image/webp' : 'image/jpeg'));
                                                             final pres = await Api.post('/uploads', {'filename': f.name, 'contentType': ct});
                                                             if (!(pres.statusCode == 200 || pres.statusCode == 201)) continue;
                                                             final p = jsonDecode(pres.body);
                                                             String objectUrl = '';
+                                                            final bytes = await _fileBytes(f);
+                                                            if (bytes == null) continue;
                                                             if ((p['method'] ?? '') == 'POST') {
                                                               final uri = Uri.parse(p['postUrl']);
                                                               final req = http.MultipartRequest('POST', uri);
                                                               final fields = (p['fields'] as Map?) ?? {};
                                                               fields.forEach((k, v) => req.fields[k] = v.toString());
-                                                              req.files.add(http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name));
+                                                              req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: f.name));
                                                               final resp = await req.send();
                                                               if (resp.statusCode == 204 || resp.statusCode == 201) {
                                                                 objectUrl = (p['objectUrl'] ?? '').toString();
                                                               }
-                                                            } else {
-                                                              await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ct}, body: f.bytes);
+                                                            } else if ((p['method'] ?? '') == 'PUT') {
+                                                              await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ct}, body: bytes);
                                                               objectUrl = p['uploadUrl'].toString().split('?').first;
+                                                            } else if ((p['method'] ?? '') == 'PROXY') {
+                                                              final resp = await Api.post('/uploads/direct', {'filename': f.name, 'contentType': ct, 'base64': base64Encode(bytes)});
+                                                              if (resp.statusCode == 200 || resp.statusCode == 201) {
+                                                                final j = jsonDecode(resp.body);
+                                                                objectUrl = (j['objectUrl'] ?? '').toString();
+                                                              }
                                                             }
                                                             if (objectUrl.isNotEmpty) {
                                                               attachments.add(objectUrl);
@@ -1637,7 +1730,7 @@ class _AdminPageState extends State<AdminPage> {
             (room['imageUrl']?.toString() ?? '').isNotEmpty
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(room['imageUrl'], width: 48, height: 48, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.meeting_room))),
+                  child: Image.network(Sanitize.sanitizeImageUrl(room['imageUrl']), width: 48, height: 48, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.meeting_room))),
                 )
               : Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.meeting_room)),
             SizedBox(width: 10,),
@@ -1701,6 +1794,26 @@ class _AdminPageState extends State<AdminPage> {
               children: [
                 Text(newRegitered['title'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),),
                 Text(newRegitered['content'], style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),),
+                const SizedBox(height: 8),
+                if ((newRegitered['attachments'] is List) && (newRegitered['attachments'] as List).isNotEmpty)
+                  SizedBox(
+                    height: 80,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: (newRegitered['attachments'] as List).length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (_, i) {
+                        final raw = ((newRegitered['attachments'] as List)[i] ?? '').toString();
+                        final url = Sanitize.sanitizeImageUrl(raw);
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: url.isNotEmpty
+                              ? Image.network(url, width: 80, height: 80, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 80, height: 80, color: Colors.grey.shade200, child: const Icon(Icons.image)))
+                              : Container(width: 80, height: 80, color: Colors.grey.shade200, child: const Icon(Icons.image)),
+                        );
+                      },
+                    ),
+                  ),
               ],
             ),
             Spacer(),

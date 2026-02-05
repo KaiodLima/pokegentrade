@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
+import 'dart:typed_data';
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import '../services/api.dart';
 import '../widgets/status_banner.dart';
@@ -90,6 +92,18 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
         actionText = null;
         setState(() {});
         final ctype = _contentTypeFor(f);
+        Future<Uint8List?> _fileBytes(PlatformFile pf) async {
+          if (pf.bytes != null) return pf.bytes!;
+          if (pf.readStream != null) {
+            final chunks = <int>[];
+            final completer = Completer<Uint8List>();
+            pf.readStream!.listen((data) {
+              chunks.addAll(data);
+            }, onDone: () => completer.complete(Uint8List.fromList(chunks)), onError: (_) => completer.complete(null), cancelOnError: true);
+            return completer.future;
+          }
+          return null;
+        }
         final pres = await Api.post('/uploads', {'filename': f.name, 'contentType': ctype});
         if (pres.statusCode == 429) {
           feedback = 'Muitas requisições, tente novamente em instantes';
@@ -106,14 +120,15 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
             setState(() {});
             break;
           }
-          if (f.bytes != null) {
-            String objectUrl;
+          final bytes = await _fileBytes(f);
+          if (bytes != null) {
+            String objectUrl = '';
             if ((p['method'] ?? '') == 'POST') {
               final uri = Uri.parse(p['postUrl']);
               final req = http.MultipartRequest('POST', uri);
               final fields = (p['fields'] as Map?) ?? {};
               fields.forEach((k, v) => req.fields[k] = v.toString());
-              req.files.add(http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name));
+              req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: f.name));
               final resp = await req.send();
               if (resp.statusCode != 204 && resp.statusCode != 201) {
                 feedback = 'Falha no upload (POST)';
@@ -123,9 +138,20 @@ class _MarketplaceNewPageState extends State<MarketplaceNewPage> {
                 break;
               }
               objectUrl = (p['objectUrl'] ?? '').toString();
-            } else {
-              await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ctype}, body: f.bytes);
+            } else if ((p['method'] ?? '') == 'PUT') {
+              await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ctype}, body: bytes);
               objectUrl = p['uploadUrl'].toString().split('?').first;
+            } else if ((p['method'] ?? '') == 'PROXY') {
+              final resp = await Api.post('/uploads/direct', {'filename': f.name, 'contentType': ctype, 'base64': base64Encode(bytes)});
+              if (!(resp.statusCode == 200 || resp.statusCode == 201)) {
+                feedback = 'Falha no upload (proxy)';
+                actionText = 'Tentar novamente';
+                setState(() {});
+                fileStatuses[index - 1] = 'Falha';
+                break;
+              }
+              final j = jsonDecode(resp.body);
+              objectUrl = (j['objectUrl'] ?? '').toString();
             }
             final attRes = await AddAttachmentUseCase(Locator.marketplace)(ad.id, url: objectUrl, type: ctype, meta: {'size': f.size});
             if (attRes.isOk) {

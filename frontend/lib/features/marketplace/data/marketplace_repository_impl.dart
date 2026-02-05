@@ -58,7 +58,15 @@ class MarketplaceRepositoryImpl implements MarketplaceRepository {
   @override
   Future<Result<bool>> addAttachment(String adId, {required String url, required String type, Map<String, dynamic>? meta}) async {
     final res = await http.post('/marketplace/ads/$adId/attachments', {'url': url, 'type': type, 'meta': meta ?? {}});
-    if (res.statusCode == 200 || res.statusCode == 201) return const Result.ok(true);
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      try {
+        final j = jsonDecode(res.body);
+        if (j is Map && (j['status'] ?? '') == 'blocked') {
+          return Result.err(jsonEncode(j));
+        }
+      } catch (_) {}
+      return const Result.ok(true);
+    }
     return Result.err('Erro ${res.statusCode}');
   }
   @override

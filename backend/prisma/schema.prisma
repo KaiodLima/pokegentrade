@@ -74,6 +74,8 @@ model AdAttachment {
   type   String
   meta   Json?
   ad     Ad     @relation(fields: [adId], references: [id])
+  isCover Boolean @default(false)
+  sortOrder Int   @default(0)
 }
 
 model Category {

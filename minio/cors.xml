@@ -1,0 +1,9 @@
+<CORSConfiguration>
+  <CORSRule>
+    <AllowedOrigin>http://localhost:8080</AllowedOrigin>
+    <AllowedMethod>GET</AllowedMethod>
+    <AllowedMethod>PUT</AllowedMethod>
+    <AllowedMethod>POST</AllowedMethod>
+    <AllowedHeader>*</AllowedHeader>
+  </CORSRule>
+</CORSConfiguration>

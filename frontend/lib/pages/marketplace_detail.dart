@@ -13,6 +13,7 @@ import '../features/marketplace/domain/usecases/delete_ad.dart';
 import '../features/marketplace/domain/usecases/suspend_author.dart';
 import 'dm.dart';
 import '../services/user_cache.dart';
+import '../services/api.dart';
 // import '../services/payments.dart';
 
 class MarketplaceDetailPage extends StatefulWidget {
@@ -55,7 +56,7 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
         'price': a.price,
         'status': a.status,
         'description': a.description,
-        'attachments': a.attachments.map((x) => {'url': x.url, 'type': x.type, 'meta': x.meta}).toList(),
+        'attachments': a.attachments.map((x) => {'id': x.id, 'url': x.url, 'type': x.type, 'meta': x.meta, 'isCover': x.isCover}).toList(),
         'authorId': a.authorId,
       };
       UserCache.getName(a.authorId).then((n) {
@@ -207,9 +208,27 @@ class _MarketplaceDetailPageState extends State<MarketplaceDetailPage> {
                                       final isImage = type.startsWith('image/');
                                       return ListTile(
                                         title: Text(url),
-                                        subtitle: Text(type),
+                                        subtitle: Text(((at['isCover'] ?? false) == true) ? 'Capa • $type' : type),
                                         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                                           ElevatedButton(onPressed: () => Clipboard.setData(ClipboardData(text: url)), child: Text(t.copyLink)),
+                                          const SizedBox(width: 6),
+                                          if (isImage && (isAdmin || (ad?['authorId']?.toString() == myUserId)))
+                                            ElevatedButton(onPressed: () async {
+                                              await Api.setTokens(widget.token, null);
+                                              final res = await Api.patch('/marketplace/ads/${ad!['id']}/attachments/${at['id']}/cover', {});
+                                              feedback = (res.statusCode == 200) ? 'Definido como capa' : 'Falha ao definir capa';
+                                              setState(() {});
+                                              await load();
+                                            }, child: const Text('Definir capa')),
+                                          const SizedBox(width: 6),
+                                          if (isAdmin || (ad?['authorId']?.toString() == myUserId))
+                                            ElevatedButton(onPressed: () async {
+                                              await Api.setTokens(widget.token, null);
+                                              final res = await Api.delete('/marketplace/ads/${ad!['id']}/attachments/${at['id']}');
+                                              feedback = ((res.statusCode == 200 || res.statusCode == 204)) ? 'Removido' : 'Falha ao remover';
+                                              setState(() {});
+                                              await load();
+                                            }, child: const Text('Remover')),
                                         ]),
                                         leading: isImage ? Image.network(url, width: 48, height: 48, errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported)) : const Icon(Icons.attach_file),
                                         onTap: isImage ? () {

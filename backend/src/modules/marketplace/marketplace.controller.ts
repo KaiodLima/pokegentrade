@@ -74,9 +74,27 @@ export class MarketplaceController {
   }
 
   @Get()
-  list() {
-    return this.prisma.ad.findMany({ where: { status: 'aprovado' }, orderBy: [{ featured: 'desc' }, { createdAt: 'desc' }], include: { attachments: true, category: true, server: true } }).catch(() => {
-      return this.memAds.filter(a => (a.status || 'pendente') === 'aprovado').sort((a, b) => {
+  list(@Req() req: any) {
+    const toPublic = (url: string) => {
+      try {
+        const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+        const u = new URL(url);
+        const e = new URL(endpoint);
+        if (u.hostname === e.hostname && u.port === e.port) {
+          const key = (u.pathname || '').replace(/^\/+/, '');
+          const base = `${(req.protocol || 'http')}://${(req.headers?.host || 'localhost:3000')}`;
+          return `${base}/uploads/get?key=${encodeURIComponent(key)}`;
+        }
+      } catch {}
+      return url;
+    };
+    return this.prisma.ad.findMany({ where: { status: 'aprovado' }, orderBy: [{ featured: 'desc' }, { createdAt: 'desc' }], include: { attachments: true, category: true, server: true } }).then(rows => {
+      return rows.map(r => ({ ...r, attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : [] }));
+    }).catch(() => {
+      return this.memAds.filter(a => (a.status || 'pendente') === 'aprovado').map(r => ({
+        ...r,
+        attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : []
+      })).sort((a, b) => {
         const fa = a.featured ? 1 : 0;
         const fb = b.featured ? 1 : 0;
         if (fb !== fa) return fb - fa;
@@ -86,9 +104,27 @@ export class MarketplaceController {
   }
   @Get('admin')
   @UseGuards(AuthGuard, new RoleGuard('Admin'))
-  adminList() {
-    return this.prisma.ad.findMany({ orderBy: { createdAt: 'desc' }, include: { attachments: true, category: true, server: true } }).catch(() => {
-      return this.memAds.sort((a, b) => (new Date(b.createdAt || new Date()).getTime() - new Date(a.createdAt || new Date()).getTime()));
+  adminList(@Req() req: any) {
+    const toPublic = (url: string) => {
+      try {
+        const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+        const u = new URL(url);
+        const e = new URL(endpoint);
+        if (u.hostname === e.hostname && u.port === e.port) {
+          const key = (u.pathname || '').replace(/^\/+/, '');
+          const base = `${(req.protocol || 'http')}://${(req.headers?.host || 'localhost:3000')}`;
+          return `${base}/uploads/get?key=${encodeURIComponent(key)}`;
+        }
+      } catch {}
+      return url;
+    };
+    return this.prisma.ad.findMany({ orderBy: { createdAt: 'desc' }, include: { attachments: true, category: true, server: true } }).then(rows => {
+      return rows.map(r => ({ ...r, attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : [] }));
+    }).catch(() => {
+      return this.memAds.map(r => ({
+        ...r,
+        attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : []
+      })).sort((a, b) => (new Date(b.createdAt || new Date()).getTime() - new Date(a.createdAt || new Date()).getTime()));
     });
   }
   @Get('mine')
@@ -96,19 +132,68 @@ export class MarketplaceController {
   async mine(@Req() req: any) {
     const userId = (req.user?.sub || '');
     try {
-      return await this.prisma.ad.findMany({ where: { authorId: userId }, orderBy: { createdAt: 'desc' }, include: { attachments: true, category: true, server: true } });
+      const rows = await this.prisma.ad.findMany({ where: { authorId: userId }, orderBy: { createdAt: 'desc' }, include: { attachments: true, category: true, server: true } });
+      const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+      const e = new URL(endpoint);
+      const toPublic = (url: string) => {
+        try {
+          const u = new URL(url);
+          if (u.hostname === e.hostname && u.port === e.port) {
+            const key = (u.pathname || '').replace(/^\/+/, '');
+            const base = `${(req.protocol || 'http')}://${(req.headers?.host || 'localhost:3000')}`;
+            return `${base}/uploads/get?key=${encodeURIComponent(key)}`;
+          }
+        } catch {}
+        return url;
+      };
+      return rows.map(r => ({ ...r, attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : [] }));
     } catch {
-      return this.memAds.filter(a => (a.authorId || '') === userId).sort((a, b) => (new Date(b.createdAt || new Date()).getTime() - new Date(a.createdAt || new Date()).getTime()));
+      const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+      const e = new URL(endpoint);
+      const toPublic = (url: string) => {
+        try {
+          const u = new URL(url);
+          if (u.hostname === e.hostname && u.port === e.port) {
+            const key = (u.pathname || '').replace(/^\/+/, '');
+            const base = `${(req.protocol || 'http')}://${(req.headers?.host || 'localhost:3000')}`;
+            return `${base}/uploads/get?key=${encodeURIComponent(key)}`;
+          }
+        } catch {}
+        return url;
+      };
+      return this.memAds.filter(a => (a.authorId || '') === userId).map(r => ({
+        ...r,
+        attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : []
+      })).sort((a, b) => (new Date(b.createdAt || new Date()).getTime() - new Date(a.createdAt || new Date()).getTime()));
     }
   }
   @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.prisma.ad.findUnique({ where: { id }, include: { attachments: true, category: true, server: true } }).then((row: any) => {
+  detail(@Param('id') id: string, @Req() req: any) {
+    const toPublic = (url: string) => {
+      try {
+        const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+        const u = new URL(url);
+        const e = new URL(endpoint);
+        if (u.hostname === e.hostname && u.port === e.port) {
+          const key = (u.pathname || '').replace(/^\/+/, '');
+          const base = `${(req.protocol || 'http')}://${(req.headers?.host || 'localhost:3000')}`;
+          return `${base}/uploads/get?key=${encodeURIComponent(key)}`;
+        }
+      } catch {}
+      return url;
+    };
+    return this.prisma.ad.findUnique({ where: { id }, include: { attachments: { orderBy: { sortOrder: 'asc' } }, category: true, server: true } }).then((row: any) => {
       if (!row) throw new NotFoundException('ad_not_found');
+      if (Array.isArray((row as any).attachments)) {
+        (row as any).attachments = (row as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) }));
+      }
       return row;
     }).catch((e: any) => {
       const mem = this.memAds.find(a => a.id === id);
-      if (mem) return mem;
+      if (mem) {
+        mem.attachments = Array.isArray((mem as any).attachments) ? (mem as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : [];
+        return mem;
+      }
       throw e instanceof NotFoundException ? e : new InternalServerErrorException('detail_failed');
     });
   }
@@ -321,12 +406,17 @@ export class MarketplaceController {
   @Post(':id/attachments')
   @UseGuards(AuthGuard)
   async attach(@Param('id') id: string, @Body() body: { url: string; type: string; meta?: any }, @Req() req: any) {
-    const ad = await this.prisma.ad.findUnique({ where: { id } }).catch(() => null as any);
-    if (!ad) throw new NotFoundException('ad_not_found');
+    let ad: any = await this.prisma.ad.findUnique({ where: { id } }).catch(() => null as any);
+    let memAd: any = null;
+    if (!ad) {
+      memAd = this.memAds.find(a => a.id === id);
+      if (!memAd) throw new NotFoundException('ad_not_found');
+    }
     const role = (req.user?.role || '').toString();
     const isAdmin = role === 'Admin' || role === 'SuperAdmin';
     const userId = (req.user?.sub || '');
-    if (!isAdmin && userId !== (ad.authorId || '')) {
+    const ownerId = (ad ? (ad.authorId || '') : (memAd?.authorId || ''));
+    if (!isAdmin && userId !== ownerId) {
       return { status: 'blocked', reason: 'forbidden' };
     }
     const allowed = new Set(['image/png','image/jpeg','image/gif','image/webp','application/pdf','text/plain','application/octet-stream']);
@@ -341,49 +431,98 @@ export class MarketplaceController {
       return { status: 'blocked', reason: 'file_too_large', maxBytes: max, size };
     }
     try {
-      const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
+      const mode = (process.env.UPLOAD_MODE || '').toLowerCase();
       const u = new URL(body.url || '');
-      const eu = new URL(endpoint);
-      const pathParts = (u.pathname || '').split('/').filter(Boolean);
-      const bucket = pathParts[0] || (process.env.S3_BUCKET || 'uploads');
-      const object = decodeURIComponent(pathParts.slice(1).join('/'));
-      const client = new MinioClient({
-        endPoint: eu.hostname,
-        port: parseInt(eu.port || '80', 10),
-        useSSL: eu.protocol === 'https:',
-        accessKey: process.env.S3_ACCESS_KEY || '',
-        secretKey: process.env.S3_SECRET_KEY || '',
-      });
-      const st = await client.statObject(bucket, object).catch(() => null as any);
-      if (!st || typeof st.size !== 'number') {
-        this.attachmentBlockedCounter.labels('object_missing').inc();
-        return { status: 'blocked', reason: 'object_missing' };
-      }
-      const actualCt = ((st as any).contentType || (st as any).metaData?.['content-type'] || (st as any).metaData?.contentType || '').toString();
-      if (actualCt && actualCt !== body.type) {
-        this.attachmentBlockedCounter.labels('content_type_mismatch').inc();
-        return { status: 'blocked', reason: 'content_type_mismatch', expected: body.type, actual: actualCt };
-      }
-      if (st.size > max) {
-        this.attachmentBlockedCounter.labels('file_too_large').inc();
-        try {
-          await client.removeObject(bucket, object);
-        } catch {}
-        return { status: 'blocked', reason: 'file_too_large', maxBytes: max, size: st.size };
+      if (mode === 'localfs' && u.pathname.startsWith('/uploads/get')) {
+        const fs = await import('fs');
+        const path = await import('path');
+        const key = (u.searchParams.get('key') || '').toString();
+        const parts = key.split('/').filter(Boolean);
+        if (parts.shift() !== 'files') {
+          this.attachmentBlockedCounter.labels('object_missing').inc();
+          return { status: 'blocked', reason: 'object_missing' };
+        }
+        const baseDir = process.env.FILES_UPLOAD_DIR || path.resolve('c:\\sistema poketibia\\uploads');
+        const full = path.join(baseDir, ...parts);
+        if (!fs.existsSync(full)) {
+          this.attachmentBlockedCounter.labels('object_missing').inc();
+          return { status: 'blocked', reason: 'object_missing' };
+        }
+        const stat = fs.statSync(full);
+        if (stat.size > max) {
+          this.attachmentBlockedCounter.labels('file_too_large').inc();
+          return { status: 'blocked', reason: 'file_too_large', maxBytes: max, size: stat.size };
+        }
+      } else {
+        const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
+        const eu = new URL(endpoint);
+        const pathParts = (u.pathname || '').split('/').filter(Boolean);
+        const bucket = pathParts[0] || (process.env.S3_BUCKET || 'uploads');
+        const object = decodeURIComponent(pathParts.slice(1).join('/'));
+        const client = new MinioClient({ endPoint: eu.hostname, port: parseInt(eu.port || '80', 10), useSSL: eu.protocol === 'https:', accessKey: process.env.S3_ACCESS_KEY || '', secretKey: process.env.S3_SECRET_KEY || '' });
+        const st = await client.statObject(bucket, object).catch(() => null as any);
+        if (!st || typeof st.size !== 'number') {
+          this.attachmentBlockedCounter.labels('object_missing').inc();
+          return { status: 'blocked', reason: 'object_missing' };
+        }
+        const actualCt = ((st as any).contentType || (st as any).metaData?.['content-type'] || (st as any).metaData?.contentType || '').toString();
+        if (actualCt && actualCt !== body.type) {
+          this.attachmentBlockedCounter.labels('content_type_mismatch').inc();
+          return { status: 'blocked', reason: 'content_type_mismatch', expected: body.type, actual: actualCt };
+        }
+        if (st.size > max) {
+          this.attachmentBlockedCounter.labels('file_too_large').inc();
+          try { await client.removeObject(bucket, object); } catch {}
+          return { status: 'blocked', reason: 'file_too_large', maxBytes: max, size: st.size };
+        }
       }
     } catch {}
-    try {
-      const row: any = await this.prisma.adAttachment.create({ data: { adId: id, url: body.url, type: body.type, meta: body.meta || {} } });
-      return row;
-    } catch {
-      const mem = this.memAds.find(a => a.id === id);
-      if (mem) {
-        const att = { id: randomUUID(), adId: id, url: body.url, type: body.type, meta: body.meta || {} };
-        mem.attachments = Array.isArray(mem.attachments) ? mem.attachments : [];
-        mem.attachments.push(att);
-        return att as any;
+    if (ad) {
+      try {
+        const count = await this.prisma.adAttachment.count({ where: { adId: id, type: { startsWith: 'image/' } } });
+        const row: any = await this.prisma.adAttachment.create({ data: { adId: id, url: body.url, type: body.type, meta: body.meta || {}, isCover: count === 0 && body.type.startsWith('image/'), sortOrder: count } });
+        return row;
+      } catch {
+        // fallback to memory if DB write fails
+        memAd = this.memAds.find(a => a.id === id);
       }
-      throw new InternalServerErrorException('attach_failed');
     }
+    if (memAd) {
+      const existingImages = Array.isArray(memAd.attachments) ? memAd.attachments.filter((x: any) => (x?.type || '').toString().startsWith('image/')) : [];
+      const att = { id: randomUUID(), adId: id, url: body.url, type: body.type, meta: body.meta || {}, isCover: (existingImages.length === 0) && body.type.startsWith('image/'), sortOrder: existingImages.length };
+      memAd.attachments = Array.isArray(memAd.attachments) ? memAd.attachments : [];
+      memAd.attachments.push(att);
+      return att as any;
+    }
+    throw new InternalServerErrorException('attach_failed');
+  }
+  @Patch(':id/attachments/:attId/cover')
+  @UseGuards(AuthGuard)
+  async setCover(@Param('id') id: string, @Param('attId') attId: string, @Req() req: any) {
+    const ad = await this.prisma.ad.findUnique({ where: { id } }).catch(() => null as any);
+    if (!ad) throw new NotFoundException('ad_not_found');
+    const isOwner = (req.user?.sub || '') === (ad.authorId || '');
+    if (!this.isAdmin(req) && !isOwner) return { status: 'blocked', reason: 'forbidden' };
+    await this.prisma.adAttachment.updateMany({ where: { adId: id }, data: { isCover: false } }).catch(() => {});
+    return await this.prisma.adAttachment.update({ where: { id: attId }, data: { isCover: true } }).catch(() => {
+      throw new InternalServerErrorException('cover_failed');
+    });
+  }
+  @Delete(':id/attachments/:attId')
+  @UseGuards(AuthGuard)
+  async removeAttachment(@Param('id') id: string, @Param('attId') attId: string, @Req() req: any) {
+    const ad = await this.prisma.ad.findUnique({ where: { id } }).catch(() => null as any);
+    if (!ad) throw new NotFoundException('ad_not_found');
+    const isOwner = (req.user?.sub || '') === (ad.authorId || '');
+    if (!this.isAdmin(req) && !isOwner) return { status: 'blocked', reason: 'forbidden' };
+    const att = await this.prisma.adAttachment.findUnique({ where: { id: attId } }).catch(() => null as any);
+    if (!att || att.adId !== id) throw new NotFoundException('attachment_not_found');
+    await this.prisma.adAttachment.delete({ where: { id: attId } }).catch(() => { throw new InternalServerErrorException('delete_failed'); });
+    const hasCover = await this.prisma.adAttachment.count({ where: { adId: id, isCover: true } });
+    if (hasCover === 0) {
+      const first = await this.prisma.adAttachment.findFirst({ where: { adId: id, type: { startsWith: 'image/' } }, orderBy: { sortOrder: 'asc' } }).catch(() => null as any);
+      if (first) await this.prisma.adAttachment.update({ where: { id: first.id }, data: { isCover: true } }).catch(() => {});
+    }
+    return { message: 'deleted' };
   }
 }

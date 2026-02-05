@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'dart:async';
+import 'dart:typed_data';
 import '../services/api.dart';
 import '../widgets/status_banner.dart';
 import '../services/me_cache.dart';
+import '../services/sanitize.dart';
 import '../app/locator.dart';
 import '../features/users/domain/usecases/get_me.dart';
 import '../features/users/domain/usecases/update_display_name.dart';
@@ -30,7 +33,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (r.isOk && r.data != null) {
       final j = r.data!;
       nameCtrl.text = (j['displayName'] ?? j['name'] ?? '').toString();
-      avatarUrl = (j['avatarUrl'] ?? '').toString();
+      avatarUrl = Sanitize.sanitizeImageUrl((j['avatarUrl'] ?? '').toString());
       setState(() {});
     }
   }
@@ -60,7 +63,20 @@ class _ProfilePageState extends State<ProfilePage> {
     final pick = await FilePicker.platform.pickFiles(withReadStream: true, allowMultiple: false, type: FileType.custom, allowedExtensions: ['png','jpg','jpeg','gif','webp']);
     if (pick == null || pick.files.isEmpty) return;
     final f = pick.files.first;
-    if (f.bytes == null) return;
+    Future<Uint8List?> _fileBytes(PlatformFile pf) async {
+      if (pf.bytes != null) return pf.bytes!;
+      if (pf.readStream != null) {
+        final chunks = <int>[];
+        final completer = Completer<Uint8List>();
+        pf.readStream!.listen((data) {
+          chunks.addAll(data);
+        }, onDone: () => completer.complete(Uint8List.fromList(chunks)), onError: (_) => completer.complete(null), cancelOnError: true);
+        return completer.future;
+      }
+      return null;
+    }
+    final bytes = await _fileBytes(f);
+    if (bytes == null) return;
     String ctype;
     final ext = (f.extension ?? '').toLowerCase();
     switch (ext) {
@@ -80,20 +96,30 @@ class _ProfilePageState extends State<ProfilePage> {
         final req = http.MultipartRequest('POST', uri);
         final fields = (p['fields'] as Map?) ?? {};
         fields.forEach((k, v) => req.fields[k] = v.toString());
-        req.files.add(http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name));
+        req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: f.name));
         final resp = await req.send();
         if (resp.statusCode == 204 || resp.statusCode == 201) {
           objectUrl = (p['objectUrl'] ?? '').toString();
         }
-      } else {
-        await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ctype}, body: f.bytes);
+      } else if ((p['method'] ?? '') == 'PUT') {
+        await http.put(Uri.parse(p['uploadUrl']), headers: {'Content-Type': ctype}, body: bytes);
         objectUrl = p['uploadUrl'].toString().split('?').first;
+      } else if ((p['method'] ?? '') == 'PROXY') {
+        final resp = await Api.post('/uploads/direct', {'filename': f.name, 'contentType': ctype, 'base64': base64Encode(bytes)});
+        if (resp.statusCode == 200 || resp.statusCode == 201) {
+          final j = jsonDecode(resp.body);
+          objectUrl = (j['objectUrl'] ?? '').toString();
+        }
       }
       if (objectUrl.isNotEmpty) {
+        setState(() {
+          avatarUrl = Sanitize.sanitizeImageUrl(objectUrl);
+          info = null;
+          error = null;
+        });
         final r = await UpdateAvatarUseCase(Locator.users)(objectUrl);
         if (r.isOk) {
           setState(() {
-            avatarUrl = objectUrl;
             info = 'Foto atualizada';
             error = null;
           });

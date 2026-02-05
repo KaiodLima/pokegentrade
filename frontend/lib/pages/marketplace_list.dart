@@ -54,18 +54,20 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
       if (serverFilter != 'todos' && (m['serverId']?.toString() ?? '') != serverFilter) return false;
       return true;
     }).toList();
-    if (sortKey == 'data') {
-      list.sort((a, b) {
+    int _cmp(Map<String, dynamic> a, Map<String, dynamic> b) {
+      if (sortKey == 'data') {
         final ad = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bd = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return bd.compareTo(ad);
-      });
-    } else if (sortKey == 'preco') {
-      list.sort((a, b) => _priceValue((b['price'] ?? '').toString()).compareTo(_priceValue((a['price'] ?? '').toString())));
-    } else {
-      list.sort((a, b) => (a['title'] ?? '').toString().toLowerCase().compareTo((b['title'] ?? '').toString().toLowerCase()));
+      } else if (sortKey == 'preco') {
+        return _priceValue((b['price'] ?? '').toString()).compareTo(_priceValue((a['price'] ?? '').toString()));
+      } else {
+        return (a['title'] ?? '').toString().toLowerCase().compareTo((b['title'] ?? '').toString().toLowerCase());
+      }
     }
-    return list;
+    final featured = list.where((m) => (m['featured'] == true)).toList()..sort(_cmp);
+    final normal = list.where((m) => !(m['featured'] == true)).toList()..sort(_cmp);
+    return [...featured, ...normal];
   }
   Future<void> load() async {
     if (widget.token.isNotEmpty) {
@@ -312,7 +314,13 @@ class _MarketplaceListPageState extends State<MarketplaceListPage> {
                         itemBuilder: (_, i) {
                           final a = visibles[i];
                           final atts = (a['attachments'] as List? ?? []);
-                          final firstImg = atts.cast<Map>().firstWhere((x) => (x['type']?.toString() ?? '').startsWith('image/'), orElse: () => {});
+                          final coverImg = atts.cast<Map>().firstWhere((x) => ((x['isCover'] ?? false) == true) && (x['type']?.toString() ?? '').startsWith('image/'), orElse: () => {});
+                          Map firstImg = {};
+                          if ((coverImg['url'] ?? '').toString().isNotEmpty) {
+                            firstImg = coverImg;
+                          } else {
+                            firstImg = atts.cast<Map>().firstWhere((x) => (x['type']?.toString() ?? '').startsWith('image/'), orElse: () => {});
+                          }
                           final imgUrl = Sanitize.sanitizeImageUrl((firstImg['url']?.toString() ?? ''));
                           final parts = _priceParts((a['price'] ?? '').toString());
                           return InkWell(
