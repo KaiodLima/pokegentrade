@@ -8,6 +8,7 @@ import { Client as MinioClient } from 'minio';
 import { Counter } from 'prom-client';
 import { metricsRegistry } from '../metrics/metrics.controller';
 import { randomUUID } from 'crypto';
+import settings from 'src/settings';
 
 class CreateAdDto {
   @IsString()
@@ -77,7 +78,7 @@ export class MarketplaceController {
   list(@Req() req: any) {
     const toPublic = (url: string) => {
       try {
-        const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+        const endpoint = settings.S3_ENDPOINT;
         const u = new URL(url);
         const e = new URL(endpoint);
         if (u.hostname === e.hostname && u.port === e.port) {
@@ -107,7 +108,7 @@ export class MarketplaceController {
   adminList(@Req() req: any) {
     const toPublic = (url: string) => {
       try {
-        const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+        const endpoint = settings.S3_ENDPOINT;
         const u = new URL(url);
         const e = new URL(endpoint);
         if (u.hostname === e.hostname && u.port === e.port) {
@@ -133,7 +134,7 @@ export class MarketplaceController {
     const userId = (req.user?.sub || '');
     try {
       const rows = await this.prisma.ad.findMany({ where: { authorId: userId }, orderBy: { createdAt: 'desc' }, include: { attachments: true, category: true, server: true } });
-      const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+      const endpoint = settings.S3_ENDPOINT;
       const e = new URL(endpoint);
       const toPublic = (url: string) => {
         try {
@@ -148,7 +149,7 @@ export class MarketplaceController {
       };
       return rows.map(r => ({ ...r, attachments: Array.isArray((r as any).attachments) ? (r as any).attachments.map((att: any) => ({ ...att, url: toPublic((att?.url || '').toString()) })) : [] }));
     } catch {
-      const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+      const endpoint = settings.S3_ENDPOINT;
       const e = new URL(endpoint);
       const toPublic = (url: string) => {
         try {
@@ -171,7 +172,7 @@ export class MarketplaceController {
   detail(@Param('id') id: string, @Req() req: any) {
     const toPublic = (url: string) => {
       try {
-        const endpoint = (process.env.S3_ENDPOINT || 'http://localhost:9000').toString();
+        const endpoint = settings.S3_ENDPOINT;
         const u = new URL(url);
         const e = new URL(endpoint);
         if (u.hostname === e.hostname && u.port === e.port) {
@@ -431,7 +432,7 @@ export class MarketplaceController {
       return { status: 'blocked', reason: 'file_too_large', maxBytes: max, size };
     }
     try {
-      const mode = (process.env.UPLOAD_MODE || '').toLowerCase();
+      const mode = settings.UPLOAD_MODE;
       const u = new URL(body.url || '');
       if (mode === 'localfs' && u.pathname.startsWith('/uploads/get')) {
         const fs = await import('fs');
@@ -442,7 +443,7 @@ export class MarketplaceController {
           this.attachmentBlockedCounter.labels('object_missing').inc();
           return { status: 'blocked', reason: 'object_missing' };
         }
-        const baseDir = process.env.FILES_UPLOAD_DIR || path.resolve('c:\\sistema poketibia\\uploads');
+        const baseDir = settings.FILES_UPLOAD_DIR;
         const full = path.join(baseDir, ...parts);
         if (!fs.existsSync(full)) {
           this.attachmentBlockedCounter.labels('object_missing').inc();
@@ -454,12 +455,12 @@ export class MarketplaceController {
           return { status: 'blocked', reason: 'file_too_large', maxBytes: max, size: stat.size };
         }
       } else {
-        const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
+        const endpoint = settings.S3_ENDPOINT;
         const eu = new URL(endpoint);
         const pathParts = (u.pathname || '').split('/').filter(Boolean);
-        const bucket = pathParts[0] || (process.env.S3_BUCKET || 'uploads');
+        const bucket = pathParts[0] || (settings.S3_BUCKET || 'uploads');
         const object = decodeURIComponent(pathParts.slice(1).join('/'));
-        const client = new MinioClient({ endPoint: eu.hostname, port: parseInt(eu.port || '80', 10), useSSL: eu.protocol === 'https:', accessKey: process.env.S3_ACCESS_KEY || '', secretKey: process.env.S3_SECRET_KEY || '' });
+        const client = new MinioClient({ endPoint: eu.hostname, port: parseInt(eu.port || '80', 10), useSSL: eu.protocol === 'https:', accessKey: settings.S3_ACCESS_KEY || '', secretKey: settings.S3_SECRET_KEY || '' });
         const st = await client.statObject(bucket, object).catch(() => null as any);
         if (!st || typeof st.size !== 'number') {
           this.attachmentBlockedCounter.labels('object_missing').inc();

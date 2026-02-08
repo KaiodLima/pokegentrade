@@ -5,6 +5,7 @@ import { RateLimitService } from '../rate-limit/rate-limit.service';
 const prom = require('prom-client');
 import { metricsRegistry } from '../metrics/metrics.controller';
 import { Buffer } from 'buffer';
+import settings from 'src/settings';
 
 @Controller('uploads')
 export class StorageController {
@@ -28,20 +29,20 @@ export class StorageController {
       .slice(0, 128);
     this.presignCounter.inc();
     try {
-      const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
-      const bucket = process.env.S3_BUCKET || 'uploads';
+      const endpoint = settings.S3_ENDPOINT;
+      const bucket = settings.S3_BUCKET;
       const u = new URL(endpoint);
       const client = new MinioClient({
         endPoint: u.hostname,
         port: parseInt(u.port || '80', 10),
         useSSL: u.protocol === 'https:',
-        accessKey: process.env.S3_ACCESS_KEY || '',
-        secretKey: process.env.S3_SECRET_KEY || '',
+        accessKey: settings.S3_ACCESS_KEY,
+        secretKey: settings.S3_SECRET_KEY,
       });
       return client.bucketExists(bucket).then(exists => {
         if (!exists) return client.makeBucket(bucket, '');
       }).then(async () => {
-        const mode = (process.env.UPLOAD_MODE || '').toLowerCase();
+        const mode = (settings.UPLOAD_MODE || '').toLowerCase();
         if (mode === 'proxy' || mode === 'localfs') {
           return { method: 'PROXY', endpoint: '/uploads/direct' };
         } else if (mode === 'post') {
@@ -76,11 +77,11 @@ export class StorageController {
     try {
       const buf = Buffer.from((body.base64 || ''), 'base64');
       if (buf.length === 0 || buf.length > (5 * 1024 * 1024)) return { status: 'blocked', reason: 'file_too_large' };
-      const mode = (process.env.UPLOAD_MODE || '').toLowerCase();
+      const mode = settings.UPLOAD_MODE;
       if (mode === 'localfs') {
         const fs = await import('fs');
         const path = await import('path');
-        const baseDir = process.env.FILES_UPLOAD_DIR || path.resolve('c:\\sistema poketibia\\uploads');
+        const baseDir = settings.FILES_UPLOAD_DIR;
         const now = new Date();
         const sub = path.join(now.getFullYear().toString(), (now.getMonth()+1).toString().padStart(2,'0'), now.getDate().toString().padStart(2,'0'));
         const dir = path.join(baseDir, sub);
@@ -94,10 +95,10 @@ export class StorageController {
         const objectUrl = `${base}/uploads/get?key=${encodeURIComponent(key)}`;
         return { objectUrl, contentType: ct, key };
       } else {
-        const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
-        const bucket = process.env.S3_BUCKET || 'uploads';
+        const endpoint = settings.S3_ENDPOINT;
+        const bucket = settings.S3_BUCKET;
         const u = new URL(endpoint);
-        const client = new MinioClient({ endPoint: u.hostname, port: parseInt(u.port || '80', 10), useSSL: u.protocol === 'https:', accessKey: process.env.S3_ACCESS_KEY || '', secretKey: process.env.S3_SECRET_KEY || '' });
+        const client = new MinioClient({ endPoint: u.hostname, port: parseInt(u.port || '80', 10), useSSL: u.protocol === 'https:', accessKey: settings.S3_ACCESS_KEY, secretKey: settings.S3_SECRET_KEY });
         const exists = await client.bucketExists(bucket).catch(() => false);
         if (!exists) await client.makeBucket(bucket, '').catch(() => {});
         await client.putObject(bucket, sanitized, buf, { 'Content-Type': ct });
@@ -113,14 +114,14 @@ export class StorageController {
     try {
       const normalized = decodeURIComponent(key || '').replace(/\\\\/g, '/').replace(/\\/g, '/');
       const parts = normalized.split('/').filter(Boolean);
-      const mode = (process.env.UPLOAD_MODE || '').toLowerCase();
+      const mode = settings.UPLOAD_MODE;
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       if (mode === 'localfs') {
         const fs = await import('fs');
         const path = await import('path');
         if (parts.shift() !== 'files') return res.status(400).json({ status: 'blocked', reason: 'invalid_key' });
-        const baseDir = process.env.FILES_UPLOAD_DIR || path.resolve('c:\\sistema poketibia\\uploads');
+        const baseDir = settings.FILES_UPLOAD_DIR;
         const full = path.join(baseDir, ...parts);
         if (!fs.existsSync(full)) return res.status(404).json({ status: 'blocked', reason: 'object_missing' });
         const lower = full.toLowerCase();
@@ -128,10 +129,10 @@ export class StorageController {
         res.setHeader('Content-Type', ct);
         fs.createReadStream(full).pipe(res);
       } else {
-        const endpoint = process.env.S3_ENDPOINT || 'http://localhost:9000';
+        const endpoint = settings.S3_ENDPOINT;
         const u = new URL(endpoint);
-        const client = new MinioClient({ endPoint: u.hostname, port: parseInt(u.port || '80', 10), useSSL: u.protocol === 'https:', accessKey: process.env.S3_ACCESS_KEY || '', secretKey: process.env.S3_SECRET_KEY || '' });
-        const bucket = parts.shift() || (process.env.S3_BUCKET || 'uploads');
+        const client = new MinioClient({ endPoint: u.hostname, port: parseInt(u.port || '80', 10), useSSL: u.protocol === 'https:', accessKey: settings.S3_ACCESS_KEY, secretKey: settings.S3_SECRET_KEY });
+        const bucket = parts.shift() || settings.S3_BUCKET;
         const object = decodeURIComponent(parts.join('/'));
         const st = await client.statObject(bucket, object).catch(() => null as any);
         if (!st) return res.status(404).json({ status: 'blocked', reason: 'object_missing' });

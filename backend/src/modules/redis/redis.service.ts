@@ -1,12 +1,13 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
+import settings from 'src/settings';
 
 @Injectable()
 export class RedisService implements OnModuleInit {
   client!: Redis | null;
   async onModuleInit() {
-    const host = process.env.REDIS_HOST || 'localhost';
-    const port = Number(process.env.REDIS_PORT || 6379);
+    const host = settings.REDIS_HOST;
+    const port = Number(settings.REDIS_PORT);
     const client = new Redis({
       host,
       port,

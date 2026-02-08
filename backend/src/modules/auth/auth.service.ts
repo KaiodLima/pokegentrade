@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import * as jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
+import settings from 'src/settings';
 
 interface RegisterInput {
   email: string;
@@ -24,9 +25,9 @@ export class AuthService implements OnModuleInit {
   private resetTokens: Map<string, string> = new Map();
 
   async onModuleInit() {
-    const email = process.env.ADMIN_EMAIL || 'admin@poketibia.local';
-    const password = process.env.ADMIN_PASSWORD || 'ChangeMe!123';
-    const name = process.env.ADMIN_NAME || 'Super Admin';
+    const email = settings.ADMIN_EMAIL;
+    const password = settings.ADMIN_PASSWORD;
+    const name = settings.ADMIN_NAME;
     try {
       const existing = await (this.prisma as any).user.findUnique({ where: { email } });
       if (existing && (existing as any).role !== 'SuperAdmin') {
@@ -88,7 +89,7 @@ export class AuthService implements OnModuleInit {
   }
 
   async refresh(refreshToken: string) {
-    const secret = process.env.JWT_REFRESH_SECRET || 'changeme';
+    const secret = settings.JWT_REFRESH_SECRET;
     let payload: any;
     try {
       payload = jwt.verify(refreshToken, secret) as any;
